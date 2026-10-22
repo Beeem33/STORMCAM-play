@@ -28,9 +28,15 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   grip that varies by surface and wetness, a 4-speed automatic with reverse,
   handbrake slides, aerodynamic drag, crosswind and tornado wind forces,
   rollovers, collisions with buildings, trees and poles, and damage.
-- **Interior:** dash, gauges with live needles, steering wheel that turns,
-  A-pillars, mirror, visors, seats, door cards, the hood seen through the
-  glass, wipers.
+- **Chase SUV model:** a lifted, matte-black full-size SUV with brush guard,
+  LED light bars, roof basket and instruments, mud-terrain tyres and fender
+  flares (`public/models/chaser.glb`, built in Blender by
+  `models/chaser_build.py` outside this repo; `ChaserModel.ts` loads it and
+  falls back to the old procedural SUV if it's missing). Lightning-bolt
+  "STORMCAM" side graphics are projected onto the paint, and a soft contact
+  shadow keeps it on the ground.
+- **Interior:** modelled dash, gauges, steering wheel that turns, A-pillars,
+  mirror, seats, door cards, the hood seen through the glass, wipers.
 - **Cameras:**
   - Driver: head inertia, road vibration, free look.
   - Dashcam: wide lens with barrel distortion, heavier noise, GPS/time OSD.
@@ -82,11 +88,12 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   controls, pause, report, garage.
 
 ### Unfinished or simplified
-- **SUV interior:** built from simple boxes (dash, pillars, seats). Under
-  storm light it reads as a dark cabin, but up close it's blocky. Needs a
-  modelled dash, door cards and a better steering wheel.
-- **Windshield droplets:** shading is basic. They refract and darken but
-  have no bright rim highlights yet.
+- **SUV model:** the current export is a draft (about 200k triangles, over
+  budget, paint still blue-grey). The modeller is cutting it to 80k and
+  switching to matte black. Cabin trim is brightened 2.5× in the loader
+  because there's no bounce light inside the car.
+- **Windshield droplets:** shading is basic. They refract and darken, with
+  a faint rim highlight.
 - **Trees:** solid noisy crowns. They read well from 20 m out but look smooth
   up close.
 - **Upgrades:** all are purchasable and most have an effect. The armor's

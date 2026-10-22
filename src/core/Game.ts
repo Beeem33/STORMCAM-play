@@ -4,6 +4,7 @@ import { atmo, patchObject } from '../rendering/Atmosphere';
 import { Terrain } from '../environment/Terrain';
 import { Lighting } from '../environment/Lighting';
 import { WorldProps } from '../environment/WorldProps';
+import { ContactShadow } from '../vehicle/ContactShadow';
 import { CG_HEIGHT, DRIVER_DOOR, type VehicleParts } from '../vehicle/VehicleModel';
 import { Vehicle, type DriveInput } from '../vehicle/Vehicle';
 import { Windshield } from '../vehicle/Windshield';
@@ -53,6 +54,7 @@ export class Game {
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
+  private readonly carShadow = new ContactShadow(2.3, 5.3);
   readonly windshield: Windshield;
   readonly rig = new CameraRig();
   readonly walker = new Walker();
@@ -99,7 +101,7 @@ export class Game {
 
     this.parts = parts;
     this.vehicleObj.add(this.parts.root);
-    this.scene.add(this.vehicleObj, this.body.root);
+    this.scene.add(this.vehicleObj, this.body.root, this.carShadow.mesh);
     patchObject(this.vehicleObj);
     this.body.load().catch((e) => console.warn('[body] chaser body unavailable', e));
     this.windshield = new Windshield(this.parts);
@@ -751,6 +753,7 @@ export class Game {
   private updateVehicleVisuals(dt: number): void {
     const p = this.parts;
     const v = this.vehicle;
+    this.carShadow.update(this.vehicleObj);
     for (let i = 0; i < 4; i++) {
       const w = v.wheels[i];
       const g = p.wheels[i];

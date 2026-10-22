@@ -151,8 +151,12 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   const glassMat = mat('Glass');
   glassMat.envMapIntensity = 1.2;
   for (const [n, m] of mats) {
-    // The cabin sits under a roof: keep sky reflections faint inside.
-    if (/Dash|Fabric|Headliner|Interior|Seat|Carpet|Plastic|Door/i.test(n)) m.envMapIntensity = 0.12;
+    // The cabin sits under a roof: keep sky reflections faint inside. With no
+    // bounce light, the true-to-life dark trim reads as black, so lift it.
+    if (/Dash|Fabric|Headliner|Interior|Seat|Carpet|Plastic|Door|^Wheel$|Gear|Knob/i.test(n)) {
+      m.envMapIntensity = 0.12;
+      m.color.multiplyScalar(2.5);
+    }
   }
   const headlightMat = mat('Headlight');
   if (headlightMat.emissive.getHex() === 0) headlightMat.emissive.set('#fff4e0');
@@ -180,8 +184,8 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   // Points in the vehicle's ground frame (relative to the model root, before the CG offset).
   const groundPos = (o: THREE.Object3D) => {
     const v = new THREE.Vector3();
-    o.getWorldPosition(v);
-    return v; // scene is at the root's origin, so world == ground frame here
+    // getWorldPosition also applies the root's CG offset; undo it so y=0 is the ground.
+    return scene.worldToLocal(o.getWorldPosition(v));
   };
   const eye = find('EyeDriver');
   if (eye) DRIVER_EYE.copy(groundPos(eye));
@@ -214,11 +218,25 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   windshield.updateMatrixWorld(true);
   const pos = windshield.geometry.getAttribute('position') as THREE.BufferAttribute;
   const uv = windshield.geometry.getAttribute('uv') as THREE.BufferAttribute;
+  const p = new THREE.Vector3();
+  // The droplet canvas wants v=0 along the bottom edge of the glass. glTF stores
+  // v flipped relative to Blender, so check which edge is lower and flip if needed.
+  {
+    let lowV = 0, highV = 0, nl = 0, nh = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const y = scene.worldToLocal(p.fromBufferAttribute(pos, i).applyMatrix4(windshield.matrixWorld)).y;
+      if (uv.getY(i) < 0.04) { lowV += y; nl++; }
+      else if (uv.getY(i) > 0.96) { highV += y; nh++; }
+    }
+    if (nl && nh && lowV / nl > highV / nh) {
+      for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
+      uv.needsUpdate = true;
+    }
+  }
   const base = { c: new THREE.Vector3(), n: 0, half: 0 };
   const top = { c: new THREE.Vector3(), n: 0, half: 0 };
-  const p = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
-    p.fromBufferAttribute(pos, i).applyMatrix4(windshield.matrixWorld);
+    scene.worldToLocal(p.fromBufferAttribute(pos, i).applyMatrix4(windshield.matrixWorld));
     const v = uv.getY(i);
     if (v < 0.04) {
       base.c.add(p);
@@ -247,7 +265,7 @@ export async function loadChaserModel(): Promise<VehicleParts> {
       if (!m.isMesh) return;
       const a = m.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < a.count; i++) {
-        p.fromBufferAttribute(a, i).applyMatrix4(m.matrixWorld);
+        scene.worldToLocal(p.fromBufferAttribute(a, i).applyMatrix4(m.matrixWorld));
         len = Math.max(len, p.distanceTo(wp));
       }
     });
@@ -290,9 +308,17 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   scene.add(dashLight);
 
   // Lightning-bolt side decals projected onto the body.
-  const body = find('Body') as THREE.Mesh | null;
+  // Body is split by material slot; project onto the painted panels only.
+  let body: THREE.Mesh | null = null;
+  find('Body')?.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !body && /paint/i.test((m.material as THREE.Material).name)) body = m;
+  });
   if (body) {
-    const box = new THREE.Box3().setFromObject(body);
+    // Work in the model's own frame (ground at y=0); DecalGeometry works in world space.
+    scene.updateMatrixWorld(true);
+    const toModel = scene.matrixWorld.clone().invert();
+    const box = new THREE.Box3().setFromObject(body).applyMatrix4(toModel);
     const decalMat = new THREE.MeshStandardMaterial({
       map: decalTexture(),
       transparent: true,
@@ -302,11 +328,12 @@ export async function loadChaserModel(): Promise<VehicleParts> {
       roughness: 0.6,
     });
     for (const side of [-1, 1]) {
-      const at = new THREE.Vector3(side * box.max.x, 1.05, 0.05);
+      // Door height, below the window line; same 2:1 aspect as the texture.
+      const at = new THREE.Vector3(side * box.max.x, 1.05, -0.15).applyMatrix4(scene.matrixWorld);
       const rot = new THREE.Euler(0, side * Math.PI / 2, 0);
       try {
-        const geo = new DecalGeometry(body, at, rot, new THREE.Vector3(2.6, 1.3, 0.8));
-        // DecalGeometry works in world space; the body is at the root origin.
+        const geo = new DecalGeometry(body, at, rot, new THREE.Vector3(2.1, 1.05, 0.8));
+        geo.applyMatrix4(toModel);
         const decal = new THREE.Mesh(geo, decalMat);
         decal.renderOrder = 2;
         scene.add(decal);
