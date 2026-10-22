@@ -6,7 +6,7 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 
 ### Done
 - **Project:** Three.js + TypeScript + Vite, modular folders, dev tools, docs.
-- **Map:** a 4 × 4-mile chase area of section roads around the gas station:
+- **Map:** a 3 × 3-mile chase area of section roads around the gas station:
   two paved highways crossing at the station, gravel roads on the other
   section lines. It has ditches, rolling terrain and five field types
   (wheat, pasture, plowed, row crop, prairie). ROAD CLOSED barricades sit
@@ -33,11 +33,17 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   (an intercept). The day report sells the data: up to about $4,000 for a
   near miss within 500 m of the vortex edge, more for an intercept and for
   stronger tornadoes. Each lost probe costs $250 to replace.
-- **Ending a day:** only the chaser's death ends it: caught on foot, or
-  carried up by the vortex inside the truck. A rolled truck is rocked back
+- **Ending a day:** only the chaser's death ends it: caught on foot, or, in
+  the truck, a violent impact while caught by the tornado (slammed down at
+  over 22 m/s or into an object at over 18 m/s within 4 s of being in the
+  core). Being sucked up is survivable: inside the vortex the truck is
+  carried no higher than about 20 m and drifts down at most 10 m/s. A rolled truck is rocked back
   onto its wheels after 3 s; at 0% health it's wrecked but limps on at about
   a third of its power. When the storms die out, a message says to end the
   chase from the pause menu to get paid.
+- **Wind:** tree crowns lean downwind, pump with the gusts and flutter
+  (stronger near the tornado); above ~13 mph leaves, straw, grass and twigs
+  start streaming past the camera, up to 900 pieces at ~80 mph.
 - **HUD:** deliberately bare: REC and clip time, speed, one red arrow
   pointing at the tornado (or the storm before it forms) with its distance,
   and the probe count. The radar draws a bold arrow on each storm showing

@@ -12,6 +12,7 @@ import { CameraRig, LENSES } from '../camera/CameraRig';
 import { Walker } from '../player/Walker';
 import { PlayerBody } from '../player/PlayerBody';
 import { ProbeSystem } from '../gameplay/Probes';
+import { WindDebris } from '../weather/WindDebris';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -55,6 +56,7 @@ export class Game {
   readonly terrain = new Terrain();
   readonly world: WorldProps;
   readonly probes: ProbeSystem;
+  readonly windDebris = new WindDebris();
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
@@ -90,6 +92,8 @@ export class Game {
   private endReason = '';
   /** The truck was carried up by the vortex with the chaser inside. */
   private driverKilled = false;
+  /** Seconds since the truck was last inside the tornado's core region. */
+  private inVortexTime = 0;
   private wreckToasted = false;
   private calmToasted = false;
   private distanceDriven = 0;
@@ -115,7 +119,7 @@ export class Game {
     this.windshield = new Windshield(this.parts);
     this.vehicle.colliders = this.world.query;
     this.probes = new ProbeSystem(this.parts, this.tornadoes);
-    this.scene.add(this.probes.group);
+    this.scene.add(this.probes.group, this.windDebris.mesh);
     this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
     this.vehicle.onRighted = () => {
       if (this.state === 'playing') this.ui.toast('You rock the truck back onto its wheels.', 'info', 4000);
@@ -195,6 +199,8 @@ export class Game {
       this.audio.impact(strength > 0.5 ? 'body' : 'debris', strength, pos);
     };
     this.vehicle.onImpact = (strength, kind) => {
+      // Being carried by the vortex is survivable; being slammed down or into something isn't.
+      if (!this.onFoot && this.inVortexTime > 0 && (kind === 'ground' ? strength > 22 : strength > 18)) this.driverKilled = true;
       this.audio.impact(kind === 'collision' ? 'collision' : 'body', Math.min(1, strength / 15));
       this.shakeImpulse = Math.max(this.shakeImpulse, Math.min(1, strength / 12));
     };
@@ -224,6 +230,7 @@ export class Game {
     this.windshield.clear();
     this.recorder.reset();
     this.probes.reset();
+    this.windDebris.clear();
     this.radar.reset();
     this.dayTime = 0;
     this.distanceDriven = 0;
@@ -469,6 +476,7 @@ export class Game {
     atmo.uFogDensity.value = 3 / L.visibility;
     atmo.uWetness.value = this.weather.wetness;
     atmo.uWind.value.set(this.windAtCam.x, this.windAtCam.z);
+    this.windDebris.update(playing ? sdt : 0, cam.position, this.windAtCam);
     this.terrain.update(cam, this.renderer.renderHeight);
     this.tornadoes.renderer.update(t, this.time, cam.position, this.lighting.sky, 1 - L.sunBlocked, this.lightning.flash);
 
@@ -527,6 +535,7 @@ export class Game {
    * vehicle — strong tornadoes destroy anything that drives into them.
    */
   private coreHazard(dt: number, t: TornadoSystem['tornado']): void {
+    this.inVortexTime = Math.max(0, this.inVortexTime - dt);
     if (!t || t.presence < 0.3) return;
     const v = this.vehicle;
     const d = t.distanceTo(v.pos);
@@ -534,15 +543,21 @@ export class Game {
     const severity = clamp((t.params.rating + 0.5) / 4, 0.2, 1.4) * t.presence * (1 - t.rope * 0.5);
     if (d < R * 1.7) {
       const inner = clamp(1 - (d - R * 0.6) / (R * 1.1), 0, 1);
-      // Lifted well off the ground inside the vortex: nobody survives that ride.
       const lift = v.pos.y - CG_HEIGHT - heightAt(v.pos.x, v.pos.z);
-      if (!this.onFoot && inner > 0.3 && lift > 12 && v.airborne > 1.5) this.driverKilled = true;
+      this.inVortexTime = 4;
+      // Inside the vortex the flow carries the truck: it spins and drifts down
+      // rather than dropping like a stone. Flung out, it falls freely.
+      if (d < R * 1.6 && lift > 1.5 && v.vel.y < -10) v.vel.y = -10;
+      // Lifted to treetop height, it's swung around the core rather than carried higher.
+      if (lift > 18 && v.vel.y > 0) v.vel.y *= Math.max(0, 1 - dt * 6);
       v.damage(dt * 4 * severity * inner);
       v.windshieldCracks = Math.min(1, v.windshieldCracks + dt * 0.3 * inner * this.career.effects.glassDamage);
       this.shakeImpulse = Math.max(this.shakeImpulse, 0.4 + inner * 0.6);
       if (Math.random() < dt * 1.4 * severity * inner) {
         t.windAt(v.pos, _w);
-        const kick = new THREE.Vector3(_w.x * 0.22, 4 + Math.random() * 7 * severity, _w.z * 0.22);
+        // Once the truck is well up, the vortex spins and carries it rather than lifting it higher.
+        const up = lift > 20 ? 0 : 4 + Math.random() * 7 * severity;
+        const kick = new THREE.Vector3(_w.x * 0.22, up, _w.z * 0.22);
         const spin = new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 3).multiplyScalar(severity);
         v.applyImpulse(kick, spin);
         this.audio.impact('body', 0.9, v.pos);
@@ -649,7 +664,7 @@ export class Game {
         this.endReason = 'Caught in the tornado';
       } else if (!this.onFoot && this.driverKilled) {
         this.endTimer = 4;
-        this.endReason = 'Truck lofted by the tornado';
+        this.endReason = 'Truck thrown by the tornado';
         this.audio.vehicleDestroyed();
       }
       if (this.vehicle.destroyed && !this.wreckToasted) {

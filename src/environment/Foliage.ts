@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getNoise3D } from '../rendering/NoiseTextures';
+import { atmo } from '../rendering/Atmosphere';
 
 /**
  * Makes the solid tree crowns read as foliage: 3D-noise leaf clumps break the
@@ -20,8 +21,10 @@ export function patchFoliage(mat: THREE.MeshStandardMaterial): void {
   mat.onBeforeCompile = (shader, renderer) => {
     prev(shader, renderer);
     shader.uniforms.uLeafNoise = { value: noise };
+    shader.uniforms.uTreeWind = atmo.uWind;
+    shader.uniforms.uTreeTime = atmo.uTime;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vLeafPos;\nvarying vec3 vLeafN;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLeafPos;\nvarying vec3 vLeafN;\nuniform vec2 uTreeWind;\nuniform float uTreeTime;')
       .replace(
         '#include <project_vertex>',
         `#include <project_vertex>
@@ -38,6 +41,29 @@ export function patchFoliage(mat: THREE.MeshStandardMaterial): void {
   #endif
   vLeafPos = (modelMatrix * lp).xyz;
   vLeafN = normalize(mat3(modelMatrix) * ln);
+  // Wind: the crown leans downwind (more for taller parts), pumps with the
+  // gusts and flutters; each tree is out of phase with its neighbours.
+  float ws = length(uTreeWind);
+  if (ws > 0.5) {
+    vec3 tb = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    #ifdef USE_BATCHING
+      tb = (modelMatrix * batchingMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    #endif
+    #ifdef USE_INSTANCING
+      tb = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    #endif
+    float hgt = max(0.0, vLeafPos.y - tb.y);
+    float phase = dot(tb.xz, vec2(0.11, 0.07));
+    float gust = 0.75 + 0.25 * sin(uTreeTime * 0.9 + phase) + 0.15 * sin(uTreeTime * 2.3 + phase * 1.7);
+    float bend = min(3.0, ws * ws * 0.0011 * gust) * pow(hgt / 10.0, 1.5);
+    vec2 dir = uTreeWind / ws;
+    float flutter = sin(uTreeTime * (5.0 + ws * 0.15) + dot(vLeafPos, vec3(0.9, 0.6, 1.3))) * min(0.35, ws * 0.008) * min(1.0, hgt / 4.0);
+    // Leaf clumps stay pinned to the rest position (vLeafPos), so they don't crawl.
+    vec3 wp = vLeafPos;
+    wp.xz += dir * bend + vec2(-dir.y, dir.x) * flutter;
+    wp.y -= bend * bend * 0.08;
+    gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+  }
 }`,
       );
     shader.fragmentShader = shader.fragmentShader

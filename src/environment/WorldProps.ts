@@ -746,6 +746,7 @@ export class WorldProps {
     // Barricades on every road leaving the chase area.
     const edge = MAP_HALF + 32;
     for (let k = -2; k <= 2; k++) {
+      if (Math.abs(k * MILE) > MAP_HALF) continue; // that road runs outside the area
       const kind = isPaved(k) ? 'endOfMap' : 'roadClosed';
       this.addFeature(buildBarricade(kind), k * MILE, -edge, 0, 'Barricade', 999);
       this.addFeature(buildBarricade(kind), k * MILE, edge, Math.PI, 'Barricade', 999);

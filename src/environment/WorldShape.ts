@@ -18,8 +18,8 @@ export const GRAVEL_HALF = 3.4;
 export const FENCE_OFFSET = 14.5;
 export const QUARTER = MILE / 2;
 
-/** The chase area: a 4 × 4-mile block of sections centred on the start junction. */
-export const MAP_HALF = 2 * MILE;
+/** The chase area: a 3 × 3-mile block centred on the start junction. */
+export const MAP_HALF = 1.5 * MILE;
 /** Section indices (floor(x / MILE)) inside the chase area, and one ring beyond for scenery. */
 export const MAP_SECTIONS = { min: -2, max: 1, sceneryMin: -3, sceneryMax: 2 };
 export const inChaseArea = (x: number, z: number, margin = 0): boolean =>
