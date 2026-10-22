@@ -231,6 +231,7 @@ export class UI {
     toggle('lensDistortion', 'Dashcam lens distortion');
     toggle('timestamp', 'Dashcam timestamp overlay');
     slider('fov', 'Driver field of view', 55, 90, 1, (v) => v + '°');
+    slider('bodycamFov', 'Bodycam field of view', 70, 110, 1, (v) => v + '°');
     slider('mouseSensitivity', 'Mouse sensitivity', 0.3, 2.5, 0.05, (v) => v.toFixed(2));
     toggle('invertY', 'Invert mouse Y');
     slider('masterVolume', 'Master volume', 0, 1, 0.05, pct);
@@ -254,7 +255,7 @@ export class UI {
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
       ['Q', 'Start / stop recording'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Interact (start engine, read signs)'],
       ['R', 'Weather radar'], ['M', 'GPS map'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
-      ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Wheel / RMB', 'Zoom (handheld)'], ['Esc', 'Pause'],
+      ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Wheel / RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
     ];
     const p = this.openPanel(el(`<div class="panel"><h2>Controls</h2><div class="keys">${keys
       .map(([k, d]) => `<span class="k">${k}</span><span>${d}</span>`)

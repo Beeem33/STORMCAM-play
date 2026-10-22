@@ -9,7 +9,7 @@ import { SKYFOG_GLSL, skyFogUniforms } from '../rendering/Atmosphere';
  * vehicle cabin are culled.
  */
 
-const MAX_RAIN = 26000;
+const MAX_RAIN = 15000;
 const MAX_HAIL = 2500;
 
 const VERT = /* glsl */ `
@@ -167,6 +167,6 @@ export class Precipitation {
     }
     (this.rainMat.uniforms.uColor.value as THREE.Color).copy(skyLight).multiplyScalar(0.75);
     (this.hailMat.uniforms.uColor.value as THREE.Color).copy(skyLight).multiplyScalar(1.1);
-    this.rainMat.uniforms.uOpacity.value = 0.22 + rain * 0.25;
+    this.rainMat.uniforms.uOpacity.value = 0.3 + rain * 0.3;
   }
 }

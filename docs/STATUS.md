@@ -6,15 +6,24 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 
 ### Done
 - **Project:** Three.js + TypeScript + Vite, modular folders, dev tools, docs.
-- **Map:** an unbounded section-road grid. Every third mile is a paved
-  two-lane highway; the rest are gravel roads. It has ditches, rolling
-  terrain and five field types (wheat, pasture, plowed, row crop, prairie).
-  The gas station lot is the starting point. Asphalt, paint, gravel ruts,
-  crop rows and wet puddles are all procedural.
-- **Props:** farmsteads (house, barn, grain bins, silo, machine shed, mailbox,
-  windbreaks), hedgerows, lone cottonwoods, round bales, telephone poles with
-  sagging wires, barbed-wire fences with leaning posts, road signs. All
-  streamed around the camera and deterministic per section.
+- **Map:** a 4 × 4-mile chase area of section roads around the gas station:
+  two paved highways crossing at the station, gravel roads on the other
+  section lines. It has ditches, rolling terrain and five field types
+  (wheat, pasture, plowed, row crop, prairie). ROAD CLOSED barricades sit
+  at the edge, and scenery continues one mile beyond it. Asphalt, paint,
+  gravel ruts, crop rows and wet puddles are all procedural.
+- **Props:** deterministic per section.
+  - Farmsteads: house, barn, grain bins, silo, machine shed, mailbox,
+    windbreaks.
+  - About 10,000 trees: hedgerows, three wooded creeks, lone cottonwoods,
+    shrubs. Trees use LODs, are culled one by one, and have leaf-clump
+    foliage shading.
+  - The crossroads town of Cedar Flats: grain elevator, water tower, church,
+    houses.
+  - Windmills that turn with the wind, nodding oil pumpjacks, rotating
+    center-pivot sprinklers.
+  - Billboards, hay stacks, abandoned trucks, stock tanks, round bales.
+  - Telephone poles with sagging wires, barbed-wire fences, road signs.
 - **Vehicle:** raycast suspension on the terrain function, slip-based tyre
   grip that varies by surface and wetness, a 4-speed automatic with reverse,
   handbrake slides, aerodynamic drag, crosswind and tornado wind forces,
@@ -22,10 +31,13 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 - **Interior:** dash, gauges with live needles, steering wheel that turns,
   A-pillars, mirror, visors, seats, door cards, the hood seen through the
   glass, wipers.
-- **Cameras:** driver (head inertia, road vibration, free look), dashcam
-  (wide lens with barrel distortion, heavier noise, GPS/time OSD) and
-  handheld phone (walk bob, hand and wind shake, zoom). All shake is scaled
-  by a setting.
+- **Cameras:**
+  - Driver: head inertia, road vibration, free look.
+  - Dashcam: wide lens with barrel distortion, heavier noise, GPS/time OSD.
+  - Bodycam on foot: 90° fisheye lens. The torso follows the mouse through
+    a spring, so looks overshoot and sway. Footfall jolts, wind buffeting,
+    timestamp OSD.
+  - All shake is scaled by a setting.
 - **Camera sensor post-processing:** auto exposure that lags (lightning blows
   out), filmic tone curve, sharpening, sensor noise that grows in the
   shadows, vignette, chromatic fringe, motion blur reconstructed from depth
@@ -89,6 +101,11 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   The garage is in the menu and report screens.
 - **Mobile:** no touch controls. The game targets desktop browsers.
 - **Audio:** levels were measured offline, not tuned by ear.
-- **Performance:** tuned for an Apple M4 laptop. Settings scale render
-  resolution, cloud steps, tornado steps and rain density; there is no
-  automatic quality detection.
+- **Performance:** tuned for an Apple M4 laptop.
+  - Adaptive resolution steps the render scale down when frames run long and
+    back up when there's headroom.
+  - The storm fields are baked to a texture once per frame for the sky
+    raymarch.
+  - Static buildings are merged per material; trees are batched with
+    per-instance culling and LODs.
+  - The canvas renders at the internal resolution, not full Retina.

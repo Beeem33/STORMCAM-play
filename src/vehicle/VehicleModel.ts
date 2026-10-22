@@ -11,20 +11,21 @@ import * as THREE from 'three';
  * hood remain — exactly the dashcam view.
  */
 
-export const CG_HEIGHT = 0.78;
-export const WHEEL_RADIUS = 0.39;
+// Lifted full-size SUV on 35" tyres (matches models/chaser_build.py).
+export const CG_HEIGHT = 0.98;
+export const WHEEL_RADIUS = 0.445;
 export const WHEEL_POS = [
-  new THREE.Vector3(-0.84, WHEEL_RADIUS, -1.47), // FL
-  new THREE.Vector3(0.84, WHEEL_RADIUS, -1.47), // FR
-  new THREE.Vector3(-0.84, WHEEL_RADIUS, 1.48), // RL
-  new THREE.Vector3(0.84, WHEEL_RADIUS, 1.48), // RR
+  new THREE.Vector3(-0.87, WHEEL_RADIUS, -1.475), // FL
+  new THREE.Vector3(0.87, WHEEL_RADIUS, -1.475), // FR
+  new THREE.Vector3(-0.87, WHEEL_RADIUS, 1.475), // RL
+  new THREE.Vector3(0.87, WHEEL_RADIUS, 1.475), // RR
 ];
-/** Driver eye point (ground frame). */
-export const DRIVER_EYE = new THREE.Vector3(-0.38, 1.3, -0.02);
-/** Dashcam lens position (ground frame), just behind the glass by the mirror. */
-export const DASHCAM_POS = new THREE.Vector3(0.06, 1.66, -0.5);
-/** Door point where the player gets out (ground frame). */
-export const DRIVER_DOOR = new THREE.Vector3(-1.6, 0, -0.2);
+/** Driver eye point (ground frame). Overwritten from the model's `EyeDriver` empty. */
+export const DRIVER_EYE = new THREE.Vector3(-0.4, 1.78, 0.1);
+/** Dashcam lens position (ground frame). Overwritten from the model's `Dashcam` empty. */
+export const DASHCAM_POS = new THREE.Vector3(0.08, 2.0, -0.45);
+/** Door point where the player gets out (ground frame). Overwritten from `DoorDriver`. */
+export const DRIVER_DOOR = new THREE.Vector3(-1.65, 0, -0.1);
 
 // Windshield corners (ground frame).
 const WS_BASE_Y = 1.14;
@@ -73,6 +74,30 @@ function grainTexture(base: string, amount: number, size = 256): THREE.CanvasTex
   });
 }
 
+/** A wiper: its pivot object, the axis it sweeps about, and its reach on the glass. */
+export interface WiperRig {
+  obj: THREE.Object3D;
+  /** Rotation axis in the object's local space (the glass normal). */
+  axis: THREE.Vector3;
+  /** Rest orientation (blade parked). */
+  base: THREE.Quaternion;
+  /** Pivot position in glass space: across (m from centre) and up the glass (m from the bottom edge). */
+  px: number;
+  py: number;
+  /** Blade reach from the pivot (m) and full sweep angle (rad). */
+  len: number;
+  maxAngle: number;
+}
+
+/** The windshield as a trapezoid in its own plane, for droplets and wipers. */
+export interface GlassFrame {
+  baseHalf: number;
+  topHalf: number;
+  /** Length up the glass from the bottom edge to the top edge, m. */
+  length: number;
+  wipers: WiperRig[];
+}
+
 export interface VehicleParts {
   root: THREE.Group;
   /** Meshes visible in the glass pass as occluders (interior). */
@@ -82,7 +107,7 @@ export interface VehicleParts {
   steeringWheel: THREE.Object3D;
   speedNeedle: THREE.Object3D;
   tachNeedle: THREE.Object3D;
-  wiperPivots: THREE.Object3D[];
+  glass: GlassFrame;
   headlightMat: THREE.MeshStandardMaterial;
   taillightMat: THREE.MeshStandardMaterial;
   gaugeMat: THREE.MeshStandardMaterial;
@@ -93,12 +118,24 @@ export interface VehicleParts {
   /** Meshes that should show crack/damage. */
   bodyMat: THREE.MeshStandardMaterial;
   dashLight: THREE.PointLight;
+  /** Canvas-painted instruments (Blender model); the procedural model uses 3D needles. */
+  gauges?: { update(mph: number, rpm: number, lit: boolean): void };
+  /** Emissive LED bars on the brush guard and rack. */
+  ledMat?: THREE.MeshStandardMaterial;
+  /** Steering wheel rest orientation and column axis (local). */
+  steeringBase?: THREE.Quaternion;
+  steeringAxis?: THREE.Vector3;
 }
 
 export function buildVehicleModel(): VehicleParts {
+  // This placeholder is smaller than the Blender truck: use its own camera mounts.
+  DRIVER_EYE.set(-0.38, 1.3 + (CG_HEIGHT - 0.78), -0.02);
+  DASHCAM_POS.set(0.06, 1.66 + (CG_HEIGHT - 0.78), -0.5);
+  DRIVER_DOOR.set(-1.6, 0, -0.2);
   const root = new THREE.Group();
   root.name = 'vehicle-model';
-  root.position.y = -CG_HEIGHT;
+  // Built for a 0.78 m CG; lift it so it sits on the bigger truck's suspension.
+  root.position.y = -0.78;
   const exterior = new THREE.Group();
   exterior.name = 'exterior';
   const interiorGroup = new THREE.Group();
@@ -611,7 +648,7 @@ export function buildVehicleModel(): VehicleParts {
   interiorGroup.add(dashLight);
 
   // ---------------------------------------------------------------- wipers
-  const wiperPivots: THREE.Object3D[] = [];
+  const wiperRigs: WiperRig[] = [];
   const wiperMat = mat('#0c0c0c', 0.55, 0.3);
   // The glass plane's tangent frame at the base, used to lay the wipers flat on it.
   for (const [px, len] of [[-0.5, 0.6], [0.16, 0.56]] as const) {
@@ -628,7 +665,7 @@ export function buildVehicleModel(): VehicleParts {
     sweep.add(arm, blade);
     pivot.add(sweep);
     root.add(pivot);
-    wiperPivots.push(sweep);
+    wiperRigs.push({ obj: sweep, axis: new THREE.Vector3(0, 0, 1), base: sweep.quaternion.clone(), px, py: -0.02, len, maxAngle: px < 0 ? 1.9 : 1.75 });
     interior.push(arm, blade);
   }
 
@@ -650,7 +687,12 @@ export function buildVehicleModel(): VehicleParts {
     steeringWheel: steering,
     speedNeedle,
     tachNeedle,
-    wiperPivots,
+    glass: {
+      baseHalf: WS_BASE_HALF,
+      topHalf: WS_TOP_HALF,
+      length: Math.hypot(WS_TOP_Y - WS_BASE_Y, WS_TOP_Z - WS_BASE_Z),
+      wipers: wiperRigs,
+    },
     headlightMat,
     taillightMat,
     gaugeMat,
@@ -661,13 +703,3 @@ export function buildVehicleModel(): VehicleParts {
     dashLight,
   };
 }
-
-/** Glass-pass constants used by the windshield shader. */
-export const WINDSHIELD_INFO = {
-  baseY: WS_BASE_Y,
-  baseZ: WS_BASE_Z,
-  topY: WS_TOP_Y,
-  topZ: WS_TOP_Z,
-  baseHalf: WS_BASE_HALF,
-  topHalf: WS_TOP_HALF,
-};

@@ -36,7 +36,7 @@ uniform mat4 uPrevViewProj;
 uniform float uGlassVeil;     // how much light the dirty glass scatters
 uniform float uFade;          // fade to black
 uniform float uFlashWhite;    // sensor blowout on a very close strike
-uniform float uDamage;        // red-tinged edge when hurt (handheld only)
+uniform float uDamage;        // red-tinged edge when hurt (bodycam only)
 varying vec2 vUv;
 
 vec3 acesFitted(vec3 x) {
@@ -82,8 +82,8 @@ void main() {
       vec3 acc = col;
       float wsum = 1.0;
       float j = hash(gl_FragCoord.xy + uTime) - 0.5;
-      for (int i = 1; i <= 8; i++) {
-        float t = (float(i) + j) / 8.0 - 0.5;
+      for (int i = 1; i <= 6; i++) {
+        float t = (float(i) + j) / 6.0 - 0.5;
         vec2 suv2 = suv + vel * t;
         float w = texture2D(tGlass, suv2).a < 0.5 ? 1.0 : 0.0;
         acc += texture2D(tScene, suv2).rgb * w;

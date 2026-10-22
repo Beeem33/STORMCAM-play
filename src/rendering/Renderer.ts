@@ -64,13 +64,25 @@ export class Renderer {
   exposure = 1.2;
   private frame = 0;
 
+  /** Per-step CPU timings (ms) of the last frame, for profiling. */
+  readonly timings: Record<string, number> = {};
+  private mark(label: string, t0: number): number {
+    const t = performance.now();
+    this.timings[label] = t - t0;
+    return t;
+  }
+
   /** Extra effects set by gameplay each frame. */
   fade = 0;
   flashWhite = 0;
   damage = 0;
   glassVeil = 0.5;
 
-  settings: RenderSettings = { renderScale: 0.8, motionBlur: true, noiseAmount: 1, cloudSteps: 44, skyDivisor: 3 };
+  settings: RenderSettings = { renderScale: 0.75, motionBlur: true, noiseAmount: 1, cloudSteps: 30, skyDivisor: 3.5 };
+  /** Automatic resolution multiplier (0.55–1) applied on top of the user's render scale. */
+  dynamicScale = 1;
+  private cssW = 1;
+  private cssH = 1;
   private width = 1;
   private height = 1;
 
@@ -134,7 +146,7 @@ export class Renderer {
     this.fsScene.add(this.fsQuad);
 
     // Environment capture of the sky for wet-road and glass reflections.
-    this.cubeRT = new THREE.WebGLCubeRenderTarget(96, { type: THREE.HalfFloatType });
+    this.cubeRT = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType });
     this.cubeCam = new THREE.CubeCamera(1, 100000, this.cubeRT);
     const envSphere = new THREE.Mesh(new THREE.SphereGeometry(5000, 32, 16), this.sky.createEnvMaterial());
     envSphere.frustumCulled = false;
@@ -143,15 +155,19 @@ export class Renderer {
   }
 
   setSize(cssWidth: number, cssHeight: number): void {
+    this.cssW = cssWidth;
+    this.cssH = cssHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const s = Math.min(1, this.settings.renderScale) * this.dynamicScale;
+    this.width = Math.max(64, Math.round(cssWidth * Math.min(dpr, 1.5) * s));
+    this.height = Math.max(36, Math.round(cssHeight * Math.min(dpr, 1.5) * s));
+    // The canvas itself is only as big as the render; the browser scales it up.
+    // (Running the sensor pass at full Retina resolution cost more than the whole scene.)
     this.gl.setPixelRatio(1);
-    this.gl.setSize(Math.round(cssWidth * dpr), Math.round(cssHeight * dpr), false);
+    this.gl.setSize(this.width, this.height, false);
     const canvas = this.gl.domElement;
     canvas.style.width = cssWidth + 'px';
     canvas.style.height = cssHeight + 'px';
-    const s = Math.min(1, this.settings.renderScale);
-    this.width = Math.max(64, Math.round(cssWidth * Math.min(dpr, 1.5) * s));
-    this.height = Math.max(36, Math.round(cssHeight * Math.min(dpr, 1.5) * s));
     this.sceneRT.setSize(this.width, this.height);
     this.glassRT.setSize(Math.round(this.width / 2), Math.round(this.height / 2));
     this.sky.setQuality(this.settings.cloudSteps, this.settings.skyDivisor);
@@ -159,6 +175,21 @@ export class Renderer {
     atmo.uViewport.value.set(this.width, this.height);
     (this.postMat.uniforms.uTexel.value as THREE.Vector2).set(1 / this.width, 1 / this.height);
     (this.lumaMat.uniforms.uSrcTexel.value as THREE.Vector2).set(1 / this.width, 1 / this.height);
+  }
+
+  /**
+   * Adaptive resolution: called with the measured frame time once per second.
+   * Drops resolution quickly when frames run long, recovers slowly.
+   */
+  adaptResolution(avgFrameMs: number): void {
+    let next = this.dynamicScale;
+    if (avgFrameMs > 19) next = Math.max(0.55, this.dynamicScale - 0.08);
+    else if (avgFrameMs < 12.5) next = Math.min(1, this.dynamicScale + 0.04);
+    if (Math.abs(next - this.dynamicScale) > 1e-3) {
+      this.dynamicScale = next;
+      this.setSize(this.cssW, this.cssH);
+      this.resetMotion();
+    }
   }
 
   get renderWidth(): number {
@@ -172,7 +203,7 @@ export class Renderer {
   updateEnvironment(scene: THREE.Scene, pos: THREE.Vector3, force = false, dt = 0): void {
     this.envTimer -= dt;
     if (!force && this.envTimer > 0) return;
-    this.envTimer = 1.2;
+    this.envTimer = 4;
     this.cubeCam.position.copy(pos);
     this.cubeCam.position.y += 2;
     this.cubeCam.update(this.gl, this.envScene);
@@ -190,22 +221,26 @@ export class Renderer {
   ): void {
     const gl = this.gl;
     this.frame++;
+    let tm = performance.now();
     camera.updateMatrixWorld();
 
     // 1. Sky.
     this.sky.render(gl, camera, time);
+    tm = this.mark('sky', tm);
 
     // 2. Scene.
     gl.setRenderTarget(this.sceneRT);
     gl.setClearColor(0x000000, 1);
     gl.clear();
     gl.render(scene, camera);
+    tm = this.mark('scene', tm);
 
     // 3. Glass: windshield water offsets + interior mask.
     gl.setRenderTarget(this.glassRT);
     gl.setClearColor(new THREE.Color(0.5, 0.5, 0), 0);
     gl.clear();
     if (glassScene) gl.render(glassScene, camera);
+    tm = this.mark('glass', tm);
 
     // 4. Exposure measurement (async readback every few frames).
     if (this.frame % 4 === 0 && !this.lumaPending) {
@@ -233,6 +268,7 @@ export class Renderer {
           this.lumaPending = false;
         });
     }
+    tm = this.mark('luma', tm);
     const avgLum = Math.exp(this.measuredLogLum);
     const target = THREE.MathUtils.clamp((0.17 / Math.max(avgLum, 1e-4)) * lens.ev, 0.35, 24);
     // Brighten slowly, darken quickly — lightning blows out before the camera reacts.
@@ -265,6 +301,7 @@ export class Renderer {
     this.fsQuad.material = this.postMat;
     gl.setRenderTarget(null);
     gl.render(this.fsScene, this.fsCam);
+    this.mark('post', tm);
   }
 
   /** Forget last frame's camera (after a teleport or camera switch) so it doesn't smear. */

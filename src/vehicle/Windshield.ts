@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { WINDSHIELD_INFO } from './VehicleModel';
-import type { VehicleParts } from './VehicleModel';
+import type { GlassFrame, VehicleParts } from './VehicleModel';
 
 /**
  * Water on the windshield and the wipers that clear it.
@@ -17,7 +16,6 @@ import type { VehicleParts } from './VehicleModel';
 
 const W = 512;
 const H = 256;
-const GLASS_LEN = Math.hypot(WINDSHIELD_INFO.topY - WINDSHIELD_INFO.baseY, WINDSHIELD_INFO.topZ - WINDSHIELD_INFO.baseZ);
 
 interface Drop {
   x: number;
@@ -28,17 +26,6 @@ interface Drop {
 }
 
 export type WiperMode = 'auto' | 'off' | 'low' | 'high';
-
-interface WiperDef {
-  px: number;
-  len: number;
-  maxAngle: number;
-}
-
-const WIPERS: WiperDef[] = [
-  { px: -0.5, len: 0.6, maxAngle: 1.9 },
-  { px: 0.16, len: 0.56, maxAngle: 1.75 },
-];
 
 export class Windshield {
   readonly glassScene = new THREE.Scene();
@@ -61,7 +48,11 @@ export class Windshield {
   /** Current effective wiper speed label for the HUD. */
   activeMode: 'off' | 'int' | 'low' | 'high' = 'off';
 
+  private readonly frame: GlassFrame;
+  private readonly _q = new THREE.Quaternion();
+
   constructor(private readonly parts: VehicleParts) {
+    this.frame = parts.glass;
     this.canvas = document.createElement('canvas');
     this.canvas.width = W;
     this.canvas.height = H;
@@ -71,22 +62,34 @@ export class Windshield {
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.generateMipmaps = false;
     this.sprite = makeDropSprite(64);
-    this.dirt = makeDirt();
+    this.dirt = makeDirt(this.frame);
     this.cracks = document.createElement('canvas');
     this.cracks.width = W;
     this.cracks.height = H;
 
     // Interior proxies: write "attached to car" into alpha.
-    const occMat = new THREE.ShaderMaterial({
-      vertexShader: 'void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'void main(){ gl_FragColor = vec4(0.5, 0.5, 0.0, 1.0); }',
-      side: THREE.DoubleSide,
-    });
+    // One occluder material per face side, so single-sided body panels stay
+    // invisible from inside the cabin, exactly as in the main render.
+    const occMats = new Map<THREE.Side, THREE.ShaderMaterial>();
+    const occFor = (side: THREE.Side) => {
+      let m = occMats.get(side);
+      if (!m) {
+        m = new THREE.ShaderMaterial({
+          vertexShader: 'void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+          fragmentShader: 'void main(){ gl_FragColor = vec4(0.5, 0.5, 0.0, 1.0); }',
+          side,
+        });
+        occMats.set(side, m);
+      }
+      return m;
+    };
     for (const src of parts.interior) {
       src.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
-        const p = new THREE.Mesh(m.geometry, occMat);
+        const srcMat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
+        if (srcMat.transparent && srcMat.opacity < 0.5) return; // glass: seen through, not an occluder
+        const p = new THREE.Mesh(m.geometry, occFor(srcMat.side));
         p.matrixAutoUpdate = false;
         // We copy the source's world matrix each frame; stop the scene graph from overwriting it.
         p.matrixWorldAutoUpdate = false;
@@ -120,14 +123,16 @@ export class Windshield {
 
   /** Glass-space (metres from the bottom-centre, along the glass) → canvas px. */
   private toCanvas(gx: number, gy: number): [number, number] {
-    const v = gy / GLASS_LEN;
-    const half = WINDSHIELD_INFO.baseHalf + (WINDSHIELD_INFO.topHalf - WINDSHIELD_INFO.baseHalf) * v;
+    const f = this.frame;
+    const v = gy / f.length;
+    const half = f.baseHalf + (f.topHalf - f.baseHalf) * v;
     return [((gx / half + 1) / 2) * W, (1 - v) * H];
   }
   private toGlass(x: number, y: number): [number, number] {
+    const f = this.frame;
     const v = 1 - y / H;
-    const half = WINDSHIELD_INFO.baseHalf + (WINDSHIELD_INFO.topHalf - WINDSHIELD_INFO.baseHalf) * v;
-    return [((x / W) * 2 - 1) * half, v * GLASS_LEN];
+    const half = f.baseHalf + (f.topHalf - f.baseHalf) * v;
+    return [((x / W) * 2 - 1) * half, v * f.length];
   }
 
   /**
@@ -169,8 +174,8 @@ export class Windshield {
     }
     // Ease the blade motion at the ends of travel.
     const ease = (a: number) => 0.5 - 0.5 * Math.cos(a * Math.PI);
-    for (let i = 0; i < 2; i++) {
-      this.parts.wiperPivots[i].rotation.z = ease(this.wiperAngle) * WIPERS[i].maxAngle;
+    for (const w of this.frame.wipers) {
+      w.obj.quaternion.copy(w.base).multiply(this._q.setFromAxisAngle(w.axis, ease(this.wiperAngle) * w.maxAngle));
     }
 
     // --- Spawn drops (more when driving into the rain).
@@ -214,11 +219,12 @@ export class Windshield {
       for (let i = this.drops.length - 1; i >= 0; i--) {
         const d = this.drops[i];
         const [gx, gy] = this.toGlass(d.x, d.y);
-        for (const wdef of WIPERS) {
+        for (const wdef of this.frame.wipers) {
           const dx = gx - wdef.px;
-          const rho = Math.hypot(dx, gy + 0.02);
+          const dy = gy - wdef.py;
+          const rho = Math.hypot(dx, dy);
           if (rho < 0.08 || rho > wdef.len + 0.04) continue;
-          const phi = Math.atan2(gy + 0.02, dx);
+          const phi = Math.atan2(dy, dx);
           if (phi >= a0 * wdef.maxAngle - 0.04 && phi <= a1 * wdef.maxAngle + 0.04) {
             this.drops.splice(i, 1);
             break;
@@ -323,7 +329,7 @@ function makeDropSprite(size: number): HTMLCanvasElement {
   return c;
 }
 
-function makeDirt(): HTMLCanvasElement {
+function makeDirt(frame: GlassFrame): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -342,13 +348,13 @@ function makeDirt(): HTMLCanvasElement {
     g.fillRect(x - r, y - r, r * 2, r * 2);
   }
   g.strokeStyle = 'rgba(128,128,30,0.35)';
-  for (let k = 0; k < 2; k++) {
-    const pivot = k === 0 ? -0.5 : 0.16;
-    const [px, py] = [((pivot / 0.79 + 1) / 2) * W, H + 4];
-    for (const rr of [0.58, 0.6, 0.32]) {
+  // Faint arcs where the blades have smeared road film.
+  for (const w of frame.wipers) {
+    const [px, py] = [((w.px / frame.baseHalf + 1) / 2) * W, H + 4];
+    for (const rr of [w.len * 0.95, w.len, w.len * 0.55]) {
       g.lineWidth = 2 + Math.random() * 3;
       g.beginPath();
-      g.arc(px, py, (rr / GLASS_LEN) * H * 1.02, Math.PI, Math.PI * 1.98);
+      g.arc(px, py, (rr / frame.length) * H * 1.02, Math.PI, Math.PI * 1.98);
       g.stroke();
     }
   }

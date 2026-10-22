@@ -1,4 +1,4 @@
-import { MILE, isPaved } from '../environment/WorldShape';
+import { MAP_HALF, MILE, isPaved } from '../environment/WorldShape';
 
 const DIRS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
@@ -88,6 +88,22 @@ export function drawMap(
   for (let j = j0; j <= j1; j++) {
     const [, pz] = toPx(0, j * MILE);
     ctx.fillText(roadName('ew', j), 8, pz - 5);
+  }
+
+  // Outside the chase area: greyed out.
+  ctx.fillStyle = 'rgba(60,60,60,0.28)';
+  {
+    const [ax, az] = toPx(-MAP_HALF, -MAP_HALF);
+    const w = MAP_HALF * 2 * scale;
+    ctx.beginPath();
+    ctx.rect(0, 0, size, size);
+    ctx.rect(ax + w, az, -w, w);
+    ctx.fill('evenodd');
+    ctx.strokeStyle = '#b8862a';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(ax, az, w, w);
+    ctx.setLineDash([]);
   }
 
   if (target) {

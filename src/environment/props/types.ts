@@ -14,5 +14,5 @@ export interface InstancedAsset {
   radius: number;
 }
 
-export type TreeKind = 'cottonwood' | 'elm' | 'cedar' | 'osage';
+export type TreeKind = 'cottonwood' | 'elm' | 'cedar' | 'osage' | 'shrub';
 export type RoadSignKind = 'stop' | 'speed55' | 'crossroad' | 'countyRoad' | 'noOutlet';

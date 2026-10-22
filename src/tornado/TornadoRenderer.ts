@@ -143,7 +143,7 @@ void main() {
     vec3 radial; float h;
     vec3 f = field(p, radial, h);
     float dens = f.x + f.y;
-    float minStep = 0.6 + uRadius * 0.08 + t * 0.002;
+    float minStep = 1.0 + uRadius * 0.11 + t * 0.003;
     float stepLen = dens > 0.002 ? minStep : clamp(f.z * 0.6, minStep, 260.0);
     if (dens > 0.002) {
       // Funnel shading: lit side vs shadow side, darker low and inside.

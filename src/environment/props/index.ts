@@ -11,4 +11,7 @@ export { buildGasStation } from './gasStation';
 export { buildRoadSign, buildMailbox } from './roadside';
 export { telephonePoleAsset, fencePostAsset, hayBaleAsset } from './instanced';
 export { treeAssets } from './trees';
+export { buildWindmill, buildPumpjack, posePumpjack, buildCenterPivot, buildStockTank, buildHayStack } from './decor';
+export { buildGrainElevator, buildWaterTower, buildChurch, buildBillboard, buildBarricade } from './town';
+export { buildAbandonedTruck } from './truck';
 export { triCount } from './util';

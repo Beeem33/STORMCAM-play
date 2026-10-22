@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import type { LensProfile } from '../rendering/Renderer';
 import { CG_HEIGHT, DASHCAM_POS, DRIVER_EYE } from '../vehicle/VehicleModel';
 import type { Vehicle } from '../vehicle/Vehicle';
-import { clamp, damp } from '../utils/MathUtils';
+import { clamp, damp, wrapAngle } from '../utils/MathUtils';
 
-export type CameraMode = 'driver' | 'dashcam' | 'handheld';
+export type CameraMode = 'driver' | 'dashcam' | 'bodycam';
 
 /** Smooth pseudo-random signal from a few incommensurate sines. */
 class Wobble {
@@ -30,9 +30,10 @@ export const LENSES: Record<CameraMode, LensProfile> = {
     barrel: 0.34, chroma: 0.014, noise: 1.6, sharpen: 0.6, vignette: 0.45,
     saturation: 0.84, contrast: 1.14, tint: new THREE.Color(0.985, 1.0, 0.97), ev: 0.8, shutter: 0.3,
   },
-  handheld: {
-    barrel: 0.03, chroma: 0.003, noise: 0.85, sharpen: 0.4, vignette: 0.16,
-    saturation: 0.95, contrast: 1.08, tint: new THREE.Color(1, 0.995, 0.99), ev: 0.78, shutter: 0.5,
+  // Chest-mounted body camera: very wide, fisheye-ish, crunchy sensor.
+  bodycam: {
+    barrel: 0.26, chroma: 0.012, noise: 1.35, sharpen: 0.55, vignette: 0.32,
+    saturation: 0.86, contrast: 1.12, tint: new THREE.Color(0.99, 1.0, 0.985), ev: 0.8, shutter: 0.55,
   },
 };
 
@@ -42,7 +43,7 @@ export interface RigContext {
   vehicleObj: THREE.Object3D;
   vehicle: Vehicle;
   /** Walker eye position + body yaw when on foot. */
-  walker: { eye: THREE.Vector3; bob: number; moving: number } | null;
+  walker: { eye: THREE.Vector3; bob: number; moving: number; animated: boolean } | null;
   mouseDX: number;
   mouseDY: number;
   wheel: number;
@@ -51,10 +52,12 @@ export interface RigContext {
   invertY: boolean;
   shake: number;
   fov: number;
-  /** Wind speed at the camera (m/s) — buffets handheld footage. */
+  /** Wind speed at the camera (m/s) — buffets bodycam footage. */
   wind: number;
   /** Extra shake impulse 0..1 (thunder, debris hits). */
   impulse: number;
+  /** Vertical field of view of the bodycam, degrees. */
+  bodycamFov: number;
 }
 
 const _v = new THREE.Vector3();
@@ -72,6 +75,10 @@ export class CameraRig {
   private readonly handShake = [new Wobble(0.9), new Wobble(1.1), new Wobble(0.7)];
   private readonly windShake = [new Wobble(5.5), new Wobble(6.8)];
   private rollSmooth = 0;
+  /** Bodycam torso direction, chasing yaw/pitch through a spring. */
+  private lookYaw = 0;
+  private lookPitch = 0;
+  private readonly lookVel = new THREE.Vector2();
   readonly lens: LensProfile = { ...LENSES.driver, tint: LENSES.driver.tint.clone() };
   /** Angular speed of the camera (rad/s) — used for footage stability scoring. */
   angularSpeed = 0;
@@ -83,7 +90,12 @@ export class CameraRig {
       this.yaw = 0;
       this.pitch = 0;
     }
-    if (mode === 'handheld') this.zoom = 1;
+    if (mode === 'bodycam') {
+      this.zoom = 1;
+      this.lookYaw = this.yaw;
+      this.lookPitch = this.pitch;
+      this.lookVel.set(0, 0);
+    }
     const l = LENSES[mode];
     Object.assign(this.lens, { ...l, tint: this.lens.tint.copy(l.tint) });
   }
@@ -129,24 +141,43 @@ export class CameraRig {
       cam.quaternion.copy(v.quat).multiply(_q.setFromEuler(_e));
       cam.fov = this.mode === 'dashcam' ? 70 : c.fov;
     } else if (c.walker) {
-      // Handheld phone footage.
-      this.zoom = clamp(this.zoom * Math.pow(1.15, -c.wheel), 1, 8);
-      if (c.zoomHeld) this.zoom = Math.max(this.zoom, 2.5);
-      this.yaw = ((this.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      this.pitch = clamp(this.pitch, -1.3, 1.35);
+      // Chest-mounted bodycam. The torso follows the mouse through a spring, so
+      // quick looks overshoot and settle; footfalls jolt the frame.
+      this.zoom = clamp(this.zoom * Math.pow(1.15, -c.wheel), 1, 4);
+      if (c.zoomHeld) this.zoom = Math.max(this.zoom, 2);
+      this.pitch = clamp(this.pitch, -1.25, 1.2);
+      const k = 150, damping = 17;
+      const dy = wrapAngle(this.yaw - this.lookYaw);
+      this.lookVel.x += (dy * k - this.lookVel.x * damping) * c.dt;
+      this.lookVel.y += ((this.pitch - this.lookPitch) * k - this.lookVel.y * damping) * c.dt;
+      this.lookYaw += this.lookVel.x * c.dt;
+      this.lookPitch += this.lookVel.y * c.dt;
+      const turnRate = Math.min(4, Math.hypot(this.lookVel.x, this.lookVel.y));
+
       const t = c.time;
-      const handAmp = 0.0045 * c.shake * (0.6 + this.zoom * 0.25);
-      const windAmp = c.shake * Math.min(0.02, (c.wind / 40) ** 2 * 0.02);
-      cam.position.copy(c.walker.eye);
-      cam.position.y += Math.sin(c.walker.bob) * 0.03 * c.walker.moving;
-      cam.position.x += Math.sin(c.walker.bob * 0.5) * 0.015 * c.walker.moving;
+      const w = c.walker;
+      const run = clamp((w.moving - 1) * 2, 0, 1);
+      // Footfalls: a sharp dip at each step, heavier when running.
+      const stepPhase = w.bob % Math.PI;
+      const impact = Math.exp(-stepPhase * 7) * w.moving * (0.012 + run * 0.025);
+      const handAmp = 0.006 * c.shake * (0.7 + this.zoom * 0.2);
+      const turnAmp = 0.012 * c.shake * turnRate;
+      const windAmp = c.shake * Math.min(0.03, (c.wind / 35) ** 2 * 0.03);
+      const breathe = Math.sin(t * 1.6) * 0.004;
+      cam.position.copy(w.eye);
+      if (!w.animated) {
+        // No body animation driving the mount: synthesise the gait bob.
+        cam.position.y += -Math.abs(Math.sin(w.bob)) * (0.035 + run * 0.03) * w.moving - impact * 1.5 + breathe;
+        cam.position.x += Math.sin(w.bob * 0.5) * (0.02 + run * 0.02) * w.moving * Math.cos(this.lookYaw);
+        cam.position.z -= Math.sin(w.bob * 0.5) * (0.02 + run * 0.02) * w.moving * Math.sin(this.lookYaw);
+      }
       _e.set(
-        this.pitch + this.handShake[0].at(t) * handAmp + this.windShake[0].at(t) * windAmp + Math.abs(Math.sin(c.walker.bob)) * 0.01 * c.walker.moving,
-        this.yaw + this.handShake[1].at(t) * handAmp + this.windShake[1].at(t) * windAmp,
-        this.handShake[2].at(t) * handAmp * 0.8 + Math.sin(c.walker.bob * 0.5) * 0.006 * c.walker.moving,
+        this.lookPitch + this.handShake[0].at(t) * handAmp + this.windShake[0].at(t) * windAmp - impact * 0.6 + this.roadShake[1].at(t) * turnAmp,
+        this.lookYaw + this.handShake[1].at(t) * handAmp + this.windShake[1].at(t) * windAmp + Math.sin(w.bob * 0.5) * 0.012 * w.moving + this.roadShake[0].at(t) * turnAmp,
+        this.handShake[2].at(t) * handAmp * 1.2 + Math.sin(w.bob * 0.5) * (0.012 + run * 0.015) * w.moving - this.lookVel.x * 0.01,
       );
       cam.quaternion.setFromEuler(_e);
-      cam.fov = 64 / this.zoom;
+      cam.fov = c.bodycamFov / this.zoom;
     }
     if (c.impulse > 0) {
       const a = c.impulse * 0.02 * c.shake;
@@ -159,6 +190,11 @@ export class CameraRig {
     const dq = this.prevQuat.angleTo(cam.quaternion);
     this.angularSpeed = damp(this.angularSpeed, dq / Math.max(c.dt, 1e-3), 6, c.dt);
     this.prevQuat.copy(cam.quaternion);
+  }
+
+  /** Direction the bodycam wearer's torso faces (spring-smoothed yaw). */
+  get torsoYaw(): number {
+    return this.lookYaw;
   }
 
   /** World-space forward direction of the camera. */

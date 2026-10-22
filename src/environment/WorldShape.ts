@@ -18,6 +18,20 @@ export const GRAVEL_HALF = 3.4;
 export const FENCE_OFFSET = 14.5;
 export const QUARTER = MILE / 2;
 
+/** The chase area: a 4 × 4-mile block of sections centred on the start junction. */
+export const MAP_HALF = 2 * MILE;
+/** Section indices (floor(x / MILE)) inside the chase area, and one ring beyond for scenery. */
+export const MAP_SECTIONS = { min: -2, max: 1, sceneryMin: -3, sceneryMax: 2 };
+export const inChaseArea = (x: number, z: number, margin = 0): boolean =>
+  Math.abs(x) <= MAP_HALF + margin && Math.abs(z) <= MAP_HALF + margin;
+
+/** Wooded creek lines that wander across the map (centreline as a function). */
+export const CREEKS: { axis: 'x' | 'z'; at: (t: number) => number }[] = [
+  { axis: 'x', at: (x) => -0.62 * MILE + Math.sin(x / 690 + 0.4) * 260 + Math.sin(x / 270 + 2.1) * 70 },
+  { axis: 'z', at: (z) => 0.55 * MILE + Math.sin(z / 640 + 1.3) * 230 + Math.sin(z / 250) * 60 },
+  { axis: 'x', at: (x) => 1.35 * MILE + Math.sin(x / 820 + 3.1) * 200 + Math.sin(x / 300 + 0.7) * 80 },
+];
+
 /** Flattened lot for the gas station at the start (NE corner of the 0/0 junction). */
 export const PAD = { x0: 4.6, x1: 72, z0: -62, z1: -4.6, cx: 38, cz: -32 };
 

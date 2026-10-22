@@ -102,6 +102,18 @@ vec4 stormFields(vec2 p) {
   return vec4(cover, precip, lower, anvil);
 }
 
+// Storm fields baked into a camera-centred texture once per frame (see FIELD_FRAG):
+// x = cover, y = precip, z = base lowering / 1000, w = striation shade.
+uniform sampler2D uField;
+uniform vec3 uFieldInfo; // centre x, centre z, half extent
+vec4 fieldAt(vec2 p) {
+  vec2 uv = (p - uFieldInfo.xy) / (2.0 * uFieldInfo.z) + 0.5;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0, 0.0, 0.0, 1.0);
+  vec4 f = texture(uField, uv);
+  f.z *= 1000.0;
+  return f;
+}
+
 float baseHeight(vec2 p, float lower) {
   float n = texture(uNoise2, p * (1.0 / 5200.0)).r;
   float n2 = texture(uNoise2, p * (1.0 / 1300.0) + uTime * 0.0004).g;
@@ -169,13 +181,13 @@ void main() {
 
   // Rain curtains below the base: few wide steps.
   {
-    const int RS = 10;
+    const int RS = 7;
     float tEnd = min(t0 + 400.0 / rd.y, 26000.0);
     float dtr = tEnd / float(RS);
     float t = dtr * jitter;
     for (int i = 0; i < RS; i++) {
       vec3 p = ro + rd * t;
-      vec4 f = stormFields(p.xz);
+      vec4 f = fieldAt(p.xz);
       float bh = baseHeight(p.xz, f.z);
       if (p.y < bh && f.y > 0.02) {
         float streak = texture(uNoise2, vec2(p.x, p.z) * (1.0 / 900.0) + vec2(0.0, uTime * 0.01)).g;
@@ -205,7 +217,7 @@ void main() {
       float tb = t0 + span * u1 * u1;
       float dt = tb - ta;
       vec3 p = ro + rd * ta;
-      vec4 f = stormFields(p.xz);
+      vec4 f = fieldAt(p.xz);
       float bh;
       float dens = cloudDensity(p, f, bh);
       if (dens > 0.001) {
@@ -226,7 +238,7 @@ void main() {
         float low = 1.0 - sstep(0.0, 0.18, hn);
         c *= mix(1.0, 0.55 + 0.75 * patchy + 0.3 * (fine - 0.5), low);
         // Stacked-plate striations around the mesocyclone: lit shelf edges, dark grooves.
-        c *= mix(1.0, 0.62 + 0.75 * sstep(0.35, 0.85, gStriae), gMesoNear * low);
+        c *= mix(1.0, f.w, low);
         c *= vec3(0.84, 0.97, 1.0); // storm tint (teal-grey)
         float fl = uFlash.w * exp(-length(p - uFlash.xyz) / 2600.0);
         c += vec3(0.78, 0.8, 1.0) * fl * 0.9;
@@ -253,6 +265,20 @@ void main() {
 }
 `;
 
+/** Bakes stormFields() over the area around the camera; one texel per ~150 m. */
+const FIELD_FRAG = SKY_GLSL.slice(0, SKY_GLSL.indexOf('float baseHeight(')) + /* glsl */ `
+uniform vec3 uFieldInfoW;
+void main() {
+  vec2 p = uFieldInfoW.xy + (vUv - 0.5) * 2.0 * uFieldInfoW.z;
+  vec4 f = stormFields(p);
+  float stri = 1.0 + (0.62 + 0.75 * sstep(0.35, 0.85, gStriae) - 1.0) * gMesoNear;
+  gl_FragColor = vec4(f.x, f.y, f.z / 1000.0, stri);
+}
+`;
+
+const FIELD_SIZE = 512;
+const FIELD_HALF = 40000;
+
 export interface SkyParams {
   sunDir: THREE.Vector3;
   sunColor: THREE.Color;
@@ -273,6 +299,9 @@ export class CloudSky {
   divisor = 3;
   /** The sky dome mesh drawn in the main scene, showing the sky texture. */
   readonly dome: THREE.Mesh;
+  private readonly fieldRT: THREE.WebGLRenderTarget;
+  private readonly fieldMat: THREE.ShaderMaterial;
+  private readonly fieldScene = new THREE.Scene();
 
   constructor() {
     this.target = new THREE.WebGLRenderTarget(4, 4, {
@@ -300,6 +329,8 @@ export class CloudSky {
         uHorizon: { value: new THREE.Color() },
         uFlash: { value: new THREE.Vector4() },
         uSteps: { value: 40 },
+        uField: { value: null },
+        uFieldInfo: { value: new THREE.Vector3(0, 0, FIELD_HALF) },
         uBaseAlt: { value: 1300 },
         uHaze: { value: 0.4 },
       },
@@ -308,6 +339,23 @@ export class CloudSky {
       depthTest: false,
       depthWrite: false,
     });
+    this.fieldRT = new THREE.WebGLRenderTarget(FIELD_SIZE, FIELD_SIZE, {
+      type: THREE.HalfFloatType,
+      depthBuffer: false,
+      magFilter: THREE.LinearFilter,
+      minFilter: THREE.LinearFilter,
+    });
+    this.material.uniforms.uField.value = this.fieldRT.texture;
+    this.fieldMat = new THREE.ShaderMaterial({
+      uniforms: { ...this.material.uniforms, uFieldInfoW: this.material.uniforms.uFieldInfo },
+      vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+      fragmentShader: FIELD_FRAG,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const fq = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.fieldMat);
+    fq.frustumCulled = false;
+    this.fieldScene.add(fq);
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.quad.frustumCulled = false;
     this.scene.add(this.quad);
@@ -380,6 +428,12 @@ export class CloudSky {
     u.uTime.value = time;
     this.dome.position.copy(u.uCamPos.value as THREE.Vector3);
     const prev = renderer.getRenderTarget();
+    // Re-bake the storm fields around the camera (snapped to whole texels).
+    const texel = (2 * FIELD_HALF) / FIELD_SIZE;
+    const cp = u.uCamPos.value as THREE.Vector3;
+    (u.uFieldInfo.value as THREE.Vector3).set(Math.round(cp.x / texel) * texel, Math.round(cp.z / texel) * texel, FIELD_HALF);
+    renderer.setRenderTarget(this.fieldRT);
+    renderer.render(this.fieldScene, this.cam);
     renderer.setRenderTarget(this.target);
     renderer.render(this.scene, this.cam);
     renderer.setRenderTarget(prev);

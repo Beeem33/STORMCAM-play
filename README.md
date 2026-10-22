@@ -43,7 +43,7 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | X | Wipers: auto / off / low / high |
 | L | Headlights |
 | T | Dashcam timestamp overlay |
-| Mouse wheel / right mouse | Zoom (handheld phone camera) |
+| Mouse wheel / right mouse | Zoom (bodycam) |
 | Shift | Run (on foot) |
 | Esc | Pause |
 

@@ -10,7 +10,6 @@ import type { SkyParams } from '../rendering/CloudSky';
 export class Lighting {
   readonly hemi = new THREE.HemisphereLight(0xa9b4bc, 0x4a4636, 1.0);
   readonly sun = new THREE.DirectionalLight(0xfff0dc, 1.0);
-  readonly flash = new THREE.DirectionalLight(0xdfe4ff, 0);
   readonly sunDir = new THREE.Vector3();
   readonly sky: SkyParams;
 
@@ -19,7 +18,7 @@ export class Lighting {
     const az = THREE.MathUtils.degToRad(250);
     const el = THREE.MathUtils.degToRad(22);
     this.sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
-    scene.add(this.hemi, this.sun, this.sun.target, this.flash, this.flash.target);
+    scene.add(this.hemi, this.sun, this.sun.target);
     this.sky = {
       sunDir: this.sunDir.clone(),
       sunColor: new THREE.Color(1.0, 0.86, 0.68),
@@ -36,18 +35,16 @@ export class Lighting {
    * @param precip 0..1 rain at the camera (darkens further)
    * @param flash lightning brightness 0..~4
    */
-  update(camPos: THREE.Vector3, cover: number, sunBlocked: number, precip: number, flash: number, flashDir: THREE.Vector3): void {
+  update(camPos: THREE.Vector3, cover: number, sunBlocked: number, precip: number, flash: number): void {
     const dark = Math.min(1, cover * 0.75 + precip * 0.35);
     const ambient = 1.25 * (1 - dark * 0.82);
-    this.hemi.intensity = ambient + flash * 0.5;
+    // Lightning lights the scene through the ambient term (one light fewer in every shader).
+    this.hemi.intensity = ambient + flash * 0.9;
     this.hemi.color.setRGB(0.66 - dark * 0.12, 0.72 - dark * 0.08, 0.76 - dark * 0.04);
     this.hemi.groundColor.setRGB(0.28, 0.26, 0.2).multiplyScalar(1 - dark * 0.5);
     this.sun.intensity = 2.6 * (1 - sunBlocked) * (1 - precip * 0.8);
     this.sun.position.copy(camPos).addScaledVector(this.sunDir, 1000);
     this.sun.target.position.copy(camPos);
-    this.flash.intensity = flash * 1.2;
-    this.flash.position.copy(camPos).addScaledVector(flashDir, 1000);
-    this.flash.target.position.copy(camPos);
     atmo.uFlash.value = flash;
 
     // Sky colours: a hazy, humid afternoon; darker and greener under the storm.

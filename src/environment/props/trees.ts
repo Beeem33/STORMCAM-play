@@ -13,6 +13,7 @@ const SPECS: Record<TreeKind, Spec> = {
   elm: { leaf: '#4d5a32', bark: '#6d665b', tipYellow: 0.08 },
   osage: { leaf: '#4e5a2b', bark: '#7d6650', tipYellow: 0.12 },
   cedar: { leaf: '#36463a', bark: '#76574a', tipYellow: 0.0 },
+  shrub: { leaf: '#56612f', bark: '#5d4c40', tipYellow: 0.1 },
 };
 
 const UP = V(0, 1, 0);
@@ -194,6 +195,23 @@ function buildTree(kind: TreeKind, seed: number): InstancedAsset {
     spray(10, V(0, 4.0, 0), 5.4, 2.4, 1.0, -0.3);
     height = 8.6;
     radius = 6.6;
+  } else if (kind === 'shrub') {
+    // wild plum / sumac thicket: a few stems and two offset, irregular clumps that reach the ground
+    const a0 = rng() * Math.PI * 2;
+    for (let k = 0; k < 2; k++) {
+      const a = a0 + k * Math.PI + rand(rng, -0.5, 0.5), d = k === 0 ? 0.35 : 1.1, hgt = k === 0 ? rand(rng, 1.9, 2.4) : rand(rng, 1.3, 1.7);
+      const c = V(Math.cos(a) * d, hgt * 0.55, Math.sin(a) * d);
+      limb(wood, rng, V(c.x * 0.6, -0.1, c.z * 0.6), V(rand(rng, -0.3, 0.3), 1, rand(rng, -0.3, 0.3)), hgt * 0.8, 0.05, 0.015, 2, 0.25, bark, 4);
+      const lobes: Lobe[] = [
+        { c: c.clone(), r: V(rand(rng, 0.9, 1.2), hgt * 0.5, rand(rng, 0.9, 1.2)) },
+        { c: c.clone().add(V(rand(rng, -0.6, 0.6), hgt * 0.25, rand(rng, -0.6, 0.6))), r: V(0.7, hgt * 0.32, 0.7) },
+        { c: c.clone().add(V(rand(rng, -0.8, 0.8), -hgt * 0.2, rand(rng, -0.8, 0.8))), r: V(0.8, hgt * 0.3, 0.8) },
+      ];
+      addCrown(c, lobes, 2, 0.22);
+    }
+    spray(3, V(0, 1.0, 0), 1.6, 0.6, 0.4, 0);
+    height = 2.4;
+    radius = 2.4;
   } else {
     // eastern red cedar: dense narrow cone
     const H = rand(rng, 7.2, 8.6);
@@ -246,6 +264,6 @@ function buildTree(kind: TreeKind, seed: number): InstancedAsset {
 /** One instanced asset per species (shared bark + foliage materials, vertex coloured). */
 export function treeAssets(): { kind: TreeKind; asset: InstancedAsset }[] {
   return memo('asset:trees', () =>
-    (['cottonwood', 'elm', 'cedar', 'osage'] as const).map((kind, i) => ({ kind, asset: buildTree(kind, 1201 + i * 977) })),
+    (['cottonwood', 'elm', 'cedar', 'osage', 'shrub'] as const).map((kind, i) => ({ kind, asset: buildTree(kind, 1201 + i * 977) })),
   );
 }

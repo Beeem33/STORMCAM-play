@@ -1,9 +1,21 @@
 import * as THREE from 'three';
 import {
+  buildAbandonedTruck,
   buildBarn,
+  buildBarricade,
+  buildBillboard,
+  buildCenterPivot,
+  buildChurch,
   buildFarmhouse,
   buildGasStation,
   buildGrainBin,
+  buildGrainElevator,
+  buildHayStack,
+  buildPumpjack,
+  buildStockTank,
+  buildWaterTower,
+  buildWindmill,
+  posePumpjack,
   buildMachineShed,
   buildMailbox,
   buildRoadSign,
@@ -15,9 +27,13 @@ import {
   type InstancedAsset,
   type PropBuild,
 } from './props';
-import { FENCE_OFFSET, MILE, PAD, fieldTypeAt, heightAt, roadHalf } from './WorldShape';
+import { CREEKS, FENCE_OFFSET, MAP_HALF, MAP_SECTIONS, MILE, PAD, fieldTypeAt, heightAt, isPaved, roadDistance, roadHalf } from './WorldShape';
 import { ColliderGrid, type Collider2D } from './Colliders';
+import { mergeByMaterial } from './mergeStatic';
+import { patchFoliage } from './Foliage';
+import { SimplifyModifier } from 'three/examples/jsm/modifiers/SimplifyModifier.js';
 import { mulberry32, hash3i } from '../utils/Random';
+import { damp } from '../utils/MathUtils';
 import { patchObject } from '../rendering/Atmosphere';
 import type { Tornado } from '../tornado/Tornado';
 import type { DebrisSystem } from '../tornado/Debris';
@@ -31,7 +47,10 @@ import type { DebrisSystem } from '../tornado/Debris';
  */
 
 interface Building {
+  /** The separate pieces (not in the scene until the building is torn apart). */
   obj: THREE.Group;
+  /** What is drawn while it stands: one mesh per material. */
+  display: THREE.Group;
   collider: Collider2D;
   label: string;
   /** Wind speed (m/s) at which it comes apart. */
@@ -47,68 +66,111 @@ interface Farmstead {
   center: THREE.Vector2;
 }
 
-/** A pool of instances sharing one InstancedAsset (one InstancedMesh per part). */
+/**
+ * A pool of instances sharing one InstancedAsset: one BatchedMesh per part
+ * (material), so every instance is frustum-culled on its own. Optional
+ * low-detail geometry (generated with meshoptimizer) for distant instances.
+ */
 class InstancePool {
-  readonly meshes: THREE.InstancedMesh[];
-  private used = 0;
-  private readonly free: number[] = [];
+  readonly meshes: THREE.BatchedMesh[];
   readonly matrices: THREE.Matrix4[] = [];
+  private readonly hi: number[] = [];
+  private lo: number[] | null = null;
+  private readonly alive = new Set<number>();
+  private readonly far = new Set<number>();
+  private readonly tints: THREE.Color[] = [];
 
   /**
    * @param tint per-instance brightness range [min, max] — breaks up identical copies.
+   * @param lodRatio when set, build a simplified copy with this fraction of the triangles.
    */
-  constructor(readonly asset: InstancedAsset, readonly capacity: number, parent: THREE.Object3D, tint: [number, number] = [0.85, 1]) {
-    const colors = new Float32Array(capacity * 3);
+  constructor(readonly asset: InstancedAsset, readonly capacity: number, parent: THREE.Object3D, tint: [number, number] = [0.85, 1], lodRatio = 0) {
     for (let i = 0; i < capacity; i++) {
       const v = tint[0] + (tint[1] - tint[0]) * ((hash3i(i, 17, 3) & 1023) / 1023);
       const hue = ((hash3i(i, 5, 9) & 255) / 255 - 0.5) * 0.08;
-      colors[i * 3] = v * (1 + hue);
-      colors[i * 3 + 1] = v;
-      colors[i * 3 + 2] = v * (1 - hue * 0.5);
+      this.tints.push(new THREE.Color(v * (1 + hue), v, v * (1 - hue * 0.5)));
+      this.matrices.push(new THREE.Matrix4().makeScale(0, 0, 0));
     }
     this.meshes = asset.parts.map((p) => {
-      const m = new THREE.InstancedMesh(p.geometry, p.material, capacity);
-      m.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-      m.count = 0;
-      m.frustumCulled = false;
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      const verts = p.geometry.attributes.position.count;
+      const idx = p.geometry.index ? p.geometry.index.count : verts;
+      // Reserve room for a low-detail copy alongside the full geometry.
+      const m = new THREE.BatchedMesh(capacity, Math.ceil(verts * 1.6), Math.ceil(idx * 1.6), p.material);
+      this.hi.push(m.addGeometry(p.geometry));
+      m.sortObjects = false;
+      m.perObjectFrustumCulled = true;
       parent.add(m);
       return m;
     });
-    for (let i = 0; i < capacity; i++) this.matrices.push(new THREE.Matrix4().makeScale(0, 0, 0));
+    if (lodRatio > 0) void this.buildLod(lodRatio);
+  }
+
+  private async buildLod(ratio: number): Promise<void> {
+    try {
+      const simplifier = new SimplifyModifier();
+      const lows: THREE.BufferGeometry[] = [];
+      for (const p of this.asset.parts) {
+        const g = p.geometry;
+        const low = await simplifier.modify(g, Math.floor(g.attributes.position.count * (1 - ratio)));
+        // Batched geometries must share an attribute layout.
+        for (const key of Object.keys(low.attributes)) if (!g.getAttribute(key)) low.deleteAttribute(key);
+        for (const key of Object.keys(g.attributes)) if (!low.getAttribute(key)) throw new Error('lod lost ' + key);
+        lows.push(low);
+      }
+      this.lo = this.meshes.map((m, k) => m.addGeometry(lows[k]));
+    } catch (e) {
+      console.warn('[props] LOD generation skipped', e);
+      this.lo = null;
+    }
   }
 
   alloc(m: THREE.Matrix4): number {
-    const i = this.free.length ? this.free.pop()! : this.used < this.capacity ? this.used++ : -1;
-    if (i < 0) return -1;
-    this.set(i, m);
-    for (const mesh of this.meshes) mesh.count = Math.max(mesh.count, this.used);
-    return i;
+    if (this.alive.size >= this.capacity) return -1;
+    let id = -1;
+    this.meshes.forEach((mesh, k) => {
+      const got = mesh.addInstance(this.hi[k]);
+      if (k === 0) id = got;
+    });
+    this.alive.add(id);
+    this.set(id, m);
+    for (const mesh of this.meshes) mesh.setColorAt(id, this.tints[id % this.capacity]);
+    return id;
   }
 
   set(i: number, m: THREE.Matrix4, part = -1): void {
     if (part < 0) this.matrices[i].copy(m);
     this.meshes.forEach((mesh, k) => {
-      if (part < 0 || part === k) {
-        mesh.setMatrixAt(i, m);
-        mesh.instanceMatrix.needsUpdate = true;
-      }
+      if (part < 0 || part === k) mesh.setMatrixAt(i, m);
     });
   }
 
   release(i: number): void {
-    this.set(i, new THREE.Matrix4().makeScale(0, 0, 0));
-    this.free.push(i);
+    if (!this.alive.delete(i)) return;
+    this.far.delete(i);
+    for (const mesh of this.meshes) mesh.deleteInstance(i);
   }
 
   clear(): void {
-    this.used = 0;
-    this.free.length = 0;
-    for (const mesh of this.meshes) mesh.count = 0;
+    for (const i of [...this.alive]) this.release(i);
+  }
+
+  /** Swap instances between full and low detail by distance from the camera. */
+  updateLod(cam: THREE.Vector3, farDist: number): void {
+    if (!this.lo) return;
+    const f2 = farDist * farDist;
+    const e = this.matrices;
+    for (const i of this.alive) {
+      const m = e[i].elements;
+      const dx = m[12] - cam.x, dz = m[14] - cam.z;
+      const far = dx * dx + dz * dz > f2;
+      if (far === this.far.has(i)) continue;
+      if (far) this.far.add(i);
+      else this.far.delete(i);
+      this.meshes.forEach((mesh, k) => mesh.setGeometryIdAt(i, far ? this.lo![k] : this.hi[k]));
+    }
   }
 }
 
-const SECTION_RADIUS = 3; // sections each way from the camera
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
@@ -134,8 +196,15 @@ export class WorldProps {
   private readonly brokenPoles = new Set<string>();
   private readonly brokenPosts = new Set<string>();
   private lastSection = '';
+  private readonly buildQueue: [number, number, number][] = [];
+  /** Whether the prop library provides the 'shrub' tree kind. */
+  private get hasShrub(): boolean {
+    return this.trees.some((t) => t.kind === 'shrub');
+  }
+  private primed = false;
   private lastLineCenter = new THREE.Vector2(1e9, 1e9);
   private lastFenceCenter = new THREE.Vector2(1e9, 1e9);
+  private lastLodCenter = new THREE.Vector2(1e9, 1e9);
   private poleIndex: { key: string; x: number; z: number; rot: number; idx: number }[] = [];
   private postIndex: { key: string; x: number; z: number; idx: number }[] = [];
   private station: PropBuild | null = null;
@@ -144,7 +213,11 @@ export class WorldProps {
   onDestroyed: ((pos: THREE.Vector3, label: string) => void) | null = null;
 
   constructor(private readonly debris: DebrisSystem) {
-    this.trees = treeAssets().map((t) => ({ kind: t.kind, pool: new InstancePool(t.asset, 2600, this.group, [0.5, 0.78]) }));
+    const assets = treeAssets();
+    for (const t of assets)
+      for (const part of t.asset.parts)
+        if (part.material.name === 'prop:foliage') patchFoliage(part.material as THREE.MeshStandardMaterial);
+    this.trees = assets.map((t) => ({ kind: t.kind, pool: new InstancePool(t.asset, t.kind === 'osage' ? 9000 : 6000, this.group, [0.5, 0.78], 0.15) }));
     this.bales = new InstancePool(hayBaleAsset(), 600, this.group);
     const pole = telephonePoleAsset();
     this.poleAttach = pole.wireAttach;
@@ -162,6 +235,7 @@ export class WorldProps {
     patchObject(this.fenceWires);
     this.group.add(this.wires, this.fenceWires);
     this.placeStation();
+    this.placeFeatures();
   }
 
   // ------------------------------------------------------------------ gas station
@@ -169,7 +243,7 @@ export class WorldProps {
     const st = buildGasStation();
     st.group.position.set(PAD.cx, heightAt(PAD.cx, PAD.cz), PAD.cz + 6);
     patchObject(st.group);
-    this.group.add(st.group);
+    this.group.add(mergeByMaterial(st.group));
     this.station = st;
     // The station's own collider covers the whole apron; collide with its structures instead.
     const parts = (st.group.userData.colliders ?? []) as ({ x: number; z: number } & PropBuild['collider'])[];
@@ -206,23 +280,29 @@ export class WorldProps {
 
   // ------------------------------------------------------------------ streaming
   update(dt: number, cam: THREE.Vector3, tornado: Tornado | null): void {
-    const si = Math.floor(cam.x / MILE);
-    const sj = Math.floor(cam.z / MILE);
-    const key = si + ',' + sj;
-    if (key !== this.lastSection) {
-      this.lastSection = key;
-      const want = new Set<string>();
-      for (let i = si - SECTION_RADIUS; i <= si + SECTION_RADIUS; i++)
-        for (let j = sj - SECTION_RADIUS; j <= sj + SECTION_RADIUS; j++) {
-          const k = i + ',' + j;
-          want.add(k);
-          if (!this.farmsteads.has(k) && !this.treeOwner.has(k)) this.buildSection(i, j);
-        }
-      for (const k of [...this.treeOwner.keys()]) if (!want.has(k)) this.dropSection(k);
+    // The map is a fixed block of sections (plus a scenery ring), built once.
+    if (!this.lastSection) {
+      this.lastSection = 'all';
+      const M = MAP_SECTIONS;
+      for (let i = M.sceneryMin; i <= M.sceneryMax; i++)
+        for (let j = M.sceneryMin; j <= M.sceneryMax; j++)
+          this.buildQueue.push([i, j, Math.hypot(i + 0.5 - cam.x / MILE, j + 0.5 - cam.z / MILE)]);
+      this.buildQueue.sort((a, b) => b[2] - a[2]);
     }
+    // Build at most one section per frame (a whole farmstead is several ms), or all of them when priming.
+    let budget = this.primed ? 1 : 1000;
+    while (budget-- > 0 && this.buildQueue.length) {
+      const [i, j] = this.buildQueue.pop()!;
+      if (!this.treeOwner.has(i + ',' + j)) this.buildSection(i, j);
+    }
+    this.primed = true;
     if (Math.hypot(cam.x - this.lastLineCenter.x, cam.z - this.lastLineCenter.y) > 250) {
       this.lastLineCenter.set(cam.x, cam.z);
       this.rebuildPoles(cam);
+    }
+    if (Math.hypot(cam.x - this.lastLodCenter.x, cam.z - this.lastLodCenter.y) > 50) {
+      this.lastLodCenter.set(cam.x, cam.z);
+      for (const t of this.trees) t.pool.updateLod(cam, 420);
     }
     if (Math.hypot(cam.x - this.lastFenceCenter.x, cam.z - this.lastFenceCenter.y) > 60) {
       this.lastFenceCenter.set(cam.x, cam.z);
@@ -257,7 +337,9 @@ export class WorldProps {
     };
 
     // Farmstead.
-    if (rng() < 0.42 && !(i === 0 && j === -1)) {
+    const M = MAP_SECTIONS;
+    const inside = i >= M.min && i <= M.max && j >= M.min && j <= M.max;
+    if (rng() < (inside ? 0.82 : 0.35) && !(i === 0 && j === -1)) {
       const side = Math.floor(rng() * 4); // which road edge it fronts
       const along = 250 + rng() * (MILE - 500);
       const setback = 55 + rng() * 45;
@@ -278,10 +360,11 @@ export class WorldProps {
         const g = Math.min(heightAt(x, z), heightAt(x + 4, z + 4), heightAt(x - 4, z - 4), heightAt(x + 4, z - 4), heightAt(x - 4, z + 4));
         b.group.position.set(x, g, z);
         b.group.rotation.y = rot + yaw;
-        const bld: Building = { obj: b.group, collider: this.addCollider(b.group, b.collider, 'farm:' + k), label, strength, destroyed: false };
+        const display = mergeByMaterial(b.group);
+        const bld: Building = { obj: b.group, display, collider: this.addCollider(b.group, b.collider, 'farm:' + k), label, strength, destroyed: false };
         fs.buildings.push(bld);
         if (destroyed.has(id)) this.ruin(bld, false);
-        else fs.group.add(b.group);
+        else fs.group.add(display);
       };
       place(buildFarmhouse(rng), -14 + rng() * 6, 8, 0, 'Farmhouse destroyed', 62 + rng() * 10);
       if (rng() < 0.75) place(buildBarn(rng), 26 + rng() * 10, -28 - rng() * 12, Math.PI / 2 * Math.floor(rng() * 2), 'Barn destroyed', 52 + rng() * 8);
@@ -313,20 +396,56 @@ export class WorldProps {
       this.farmsteads.set(k, fs);
     }
 
-    // Hedgerow along one fence line of the section.
-    if (rng() < 0.25) {
-      const alongX = rng() < 0.5;
-      const off = FENCE_OFFSET + 3;
-      for (let t = 40; t < MILE - 40; t += 7 + rng() * 6) {
-        if (rng() < 0.15) continue;
-        const x = alongX ? x0 + t : x0 + off;
-        const z = alongX ? z0 + off : z0 + t;
-        addTree('osage', x, z, 0.7 + rng() * 0.5);
+    const fsHere = this.farmsteads.get(k);
+    const clearOfFarm = (x: number, z: number) => !fsHere || Math.hypot(x - fsHere.center.x, z - fsHere.center.y) > 110;
+    // Hedgerows and shelterbelts along fence lines (Osage orange, with cedars and shrubs).
+    const edges = [
+      { alongX: true, off: FENCE_OFFSET + 3 },
+      { alongX: true, off: MILE - FENCE_OFFSET - 3 },
+      { alongX: false, off: FENCE_OFFSET + 3 },
+      { alongX: false, off: MILE - FENCE_OFFSET - 3 },
+      { alongX: true, off: MILE / 2 },
+      { alongX: false, off: MILE / 2 },
+    ];
+    for (const e of edges) {
+      if (rng() > (inside ? 0.38 : 0.14)) continue;
+      const start = 40 + rng() * 200;
+      const end = MILE - 40 - rng() * 200;
+      for (let t = start; t < end; t += 6 + rng() * 6) {
+        if (rng() < 0.12) continue;
+        const x = e.alongX ? x0 + t : x0 + e.off + (rng() - 0.5) * 3;
+        const z = e.alongX ? z0 + e.off + (rng() - 0.5) * 3 : z0 + t;
+        if (!clearOfFarm(x, z)) continue;
+        const r = rng();
+        addTree(r < 0.62 ? 'osage' : r < 0.8 ? 'cedar' : this.hasShrub ? 'shrub' : 'osage', x, z, 0.65 + rng() * 0.5);
       }
     }
-    // Lone cottonwoods in pastures / along draws.
-    const lone = Math.floor(rng() * 4);
-    for (let n = 0; n < lone; n++) addTree('cottonwood', x0 + 80 + rng() * (MILE - 160), z0 + 80 + rng() * (MILE - 160), 1 + rng() * 0.5);
+    // Wooded creeks: cottonwoods, elms and thickets on both banks.
+    for (const c of CREEKS) {
+      for (let t = 0; t < MILE; t += 13 + rng() * 14) {
+        const a = (c.axis === 'x' ? x0 : z0) + t;
+        const b = c.at(a);
+        const lo = c.axis === 'x' ? z0 : x0;
+        if (b < lo - 30 || b > lo + MILE + 30) continue;
+        for (const side of [-1, 1]) {
+          if (rng() < 0.25) continue;
+          const off = side * (6 + rng() * 22);
+          const x = c.axis === 'x' ? a : b + off;
+          const z = c.axis === 'x' ? b + off : a;
+          if (Math.floor(x / MILE) !== i || Math.floor(z / MILE) !== j) continue;
+          if (roadDistance(x, z) < 22 || !clearOfFarm(x, z)) continue;
+          const r = rng();
+          addTree(r < 0.45 ? 'cottonwood' : r < 0.75 ? 'elm' : this.hasShrub ? 'shrub' : 'osage', x, z, 0.75 + rng() * 0.6);
+        }
+      }
+    }
+    // Lone trees in pastures and along draws.
+    const lone = inside ? 3 + Math.floor(rng() * 6) : Math.floor(rng() * 3);
+    for (let n = 0; n < lone; n++) {
+      const x = x0 + 80 + rng() * (MILE - 160);
+      const z = z0 + 80 + rng() * (MILE - 160);
+      if (clearOfFarm(x, z)) addTree(rng() < 0.6 ? 'cottonwood' : 'elm', x, z, 0.9 + rng() * 0.6);
+    }
 
     // Round bales in hay fields.
     const bales: { idx: number; x: number; z: number }[] = [];
@@ -504,9 +623,171 @@ export class WorldProps {
   }
 
   // ------------------------------------------------------------------ destruction
+  // ------------------------------------------------------------------ landmarks
+  /** Standalone landmarks across the chase area (town, windmills, pumpjacks, pivots…). */
+  private readonly features: Building[] = [];
+  private readonly windmills: THREE.Object3D[] = [];
+  private readonly pumpjacks: { group: THREE.Group; phase: number; speed: number }[] = [];
+  private readonly pivots: { group: THREE.Group; speed: number }[] = [];
+  private animTime = 0;
+
+  private addFeature(b: PropBuild, x: number, z: number, yaw: number, label: string, strength: number, animated = false): Building {
+    const g = Math.min(heightAt(x, z), heightAt(x + 3, z + 3), heightAt(x - 3, z - 3));
+    b.group.position.set(x, g, z);
+    b.group.rotation.y = yaw;
+    patchObject(b.group);
+    // Animated props keep their moving parts; static ones are merged to cut draw calls.
+    const display = animated ? b.group : mergeByMaterial(b.group);
+    const subs = (b.group.userData.colliders ?? null) as ({ x: number; z: number } & PropBuild['collider'])[] | null;
+    let collider: Collider2D;
+    if (subs && subs.length) {
+      const cs = Math.cos(yaw), sn = Math.sin(yaw);
+      const made = subs.map((c) => {
+        const cx = x + c.x * cs + c.z * sn;
+        const cz = z - c.x * sn + c.z * cs;
+        const col: Collider2D = c.type === 'circle' ? { type: 'circle', x: cx, z: cz, r: c.r, owner: 'feature' } : { type: 'box', x: cx, z: cz, hx: c.hx, hz: c.hz, rot: yaw, owner: 'feature' };
+        this.colliders.add(col);
+        return col;
+      });
+      collider = made[0];
+    } else collider = this.addCollider(b.group, b.collider, 'feature');
+    const bld: Building = { obj: b.group, display, collider, label, strength, destroyed: false };
+    this.features.push(bld);
+    this.group.add(display);
+    return bld;
+  }
+
+  private placeFeatures(): void {
+    const rng = mulberry32(90210);
+    const r = (lo: number, hi: number) => lo + rng() * (hi - lo);
+    // Clear of roads, the station lot and each other.
+    const taken: [number, number, number][] = [[PAD.cx, PAD.cz, 60]];
+    const free = (x: number, z: number, rad: number) =>
+      roadDistance(x, z) > FENCE_OFFSET + rad + 4 && taken.every(([tx, tz, tr]) => Math.hypot(x - tx, z - tz) > tr + rad) && Math.abs(x) < MAP_HALF - 40 && Math.abs(z) < MAP_HALF - 40;
+    const spot = (rad: number, tries = 40, pred: (x: number, z: number) => boolean = () => true): [number, number] | null => {
+      for (let i = 0; i < tries; i++) {
+        const x = r(-MAP_HALF, MAP_HALF), z = r(-MAP_HALF, MAP_HALF);
+        if (free(x, z, rad) && pred(x, z)) {
+          taken.push([x, z, rad]);
+          return [x, z];
+        }
+      }
+      return null;
+    };
+
+    // Cedar Flats: a crossroads town in the north-west section corner.
+    const tx = -MILE, tz = -MILE;
+    const town = (dx: number, dz: number, b: PropBuild, yaw: number, label: string, strength: number, rad: number) => {
+      taken.push([tx + dx, tz + dz, rad]);
+      this.addFeature(b, tx + dx, tz + dz, yaw, label, strength);
+    };
+    town(48, -42, buildGrainElevator(rng), Math.PI / 2, 'Grain elevator hit', 95, 30);
+    town(-46, 52, buildWaterTower(rng, 'CEDAR FLATS'), 0.3, 'Water tower down', 80, 10);
+    town(-40, -42, buildChurch(rng), Math.PI / 2, 'Church destroyed', 64, 12);
+    town(40, 46, buildFarmhouse(rng), Math.PI, 'House destroyed', 62, 10);
+    town(40, 78, buildFarmhouse(rng), Math.PI, 'House destroyed', 62, 10);
+    town(-42, 92, buildFarmhouse(rng), 0, 'House destroyed', 62, 10);
+    town(78, 38, buildFarmhouse(rng), -Math.PI / 2, 'House destroyed', 62, 10);
+    town(-80, -38, buildFarmhouse(rng), Math.PI / 2, 'House destroyed', 62, 10);
+
+    // Windmills and stock tanks in pastures.
+    for (let n = 0; n < 9; n++) {
+      const p = spot(8, 60, (x, z) => fieldTypeAt(x, z) === 1 || fieldTypeAt(x, z) === 4);
+      if (!p) continue;
+      const b = this.addFeature(buildWindmill(rng), p[0], p[1], r(0, Math.PI * 2), 'Windmill wrecked', 46, true);
+      const rotor = b.obj.getObjectByName('Head') ?? b.obj.getObjectByName('Rotor');
+      if (rotor) this.windmills.push(b.obj);
+      if (rng() < 0.6) {
+        const q = spot(4);
+        if (q) this.addFeature(buildStockTank(rng), q[0], q[1], r(0, 6), 'Stock tank', 60);
+      }
+    }
+    // Oil pumpjacks (central Kansas has thousands).
+    for (let n = 0; n < 9; n++) {
+      const p = spot(7);
+      if (!p) continue;
+      const b = this.addFeature(buildPumpjack(rng), p[0], p[1], r(0, Math.PI * 2), 'Pumpjack toppled', 70, true);
+      this.pumpjacks.push({ group: b.obj, phase: r(0, Math.PI * 2), speed: r(0.7, 1.1) });
+    }
+    // Center-pivot sprinklers on crop quarters.
+    for (let n = 0; n < 4; n++) {
+      const p = spot(30, 80, (x, z) => [0, 3].includes(fieldTypeAt(x, z)));
+      if (!p) continue;
+      // Keep the whole sweep inside its quarter: centre it in the quarter section.
+      const qx = (Math.floor(p[0] / (MILE / 2)) + 0.5) * (MILE / 2);
+      const qz = (Math.floor(p[1] / (MILE / 2)) + 0.5) * (MILE / 2);
+      if (!free(qx, qz, 4)) continue;
+      taken.push([qx, qz, 240]);
+      const b = this.addFeature(buildCenterPivot(rng, 4), qx, qz, r(0, Math.PI * 2), 'Center pivot flipped', 42, true);
+      this.pivots.push({ group: b.obj, speed: r(0.004, 0.008) });
+    }
+    // Hay stacks and abandoned trucks.
+    for (let n = 0; n < 10; n++) {
+      const p = spot(5);
+      if (p) this.addFeature(buildHayStack(rng), p[0], p[1], r(0, Math.PI), 'Hay stack scattered', 40);
+    }
+    for (let n = 0; n < 5; n++) {
+      const p = spot(5);
+      if (p) this.addFeature(buildAbandonedTruck(rng), p[0], p[1], r(0, Math.PI * 2), 'Old truck thrown', 58);
+    }
+    // Billboards along the highways, facing traffic.
+    for (let n = 0; n < 6; n++) {
+      const alongNS = n % 2 === 0;
+      const a = r(-MAP_HALF + 300, MAP_HALF - 300);
+      const side = rng() < 0.5 ? -1 : 1;
+      const x = alongNS ? side * (FENCE_OFFSET + 10) : a;
+      const z = alongNS ? a : side * (FENCE_OFFSET + 10);
+      if (Math.hypot(x - PAD.cx, z - PAD.cz) < 120 || Math.hypot(x - tx, z - tz) < 150) continue;
+      // Face along the road (toward oncoming traffic), angled slightly toward it.
+      const yaw = alongNS ? (rng() < 0.5 ? 0 : Math.PI) + side * 0.3 : (rng() < 0.5 ? 1 : -1) * Math.PI / 2 + side * 0.3;
+      this.addFeature(buildBillboard(rng), x, z, yaw, 'Billboard torn down', 45);
+    }
+    // Barricades on every road leaving the chase area.
+    const edge = MAP_HALF + 32;
+    for (let k = -2; k <= 2; k++) {
+      const kind = isPaved(k) ? 'endOfMap' : 'roadClosed';
+      this.addFeature(buildBarricade(kind), k * MILE, -edge, 0, 'Barricade', 999);
+      this.addFeature(buildBarricade(kind), k * MILE, edge, Math.PI, 'Barricade', 999);
+      this.addFeature(buildBarricade(kind), -edge, k * MILE, -Math.PI / 2, 'Barricade', 999);
+      this.addFeature(buildBarricade(kind), edge, k * MILE, Math.PI / 2, 'Barricade', 999);
+    }
+  }
+
+  /** Windmills turn with the wind, pumpjacks nod, pivots creep round. */
+  animate(dt: number, cam: THREE.Vector3, wind: THREE.Vector2): void {
+    this.animTime += dt;
+    const ws = wind.length();
+    const windYaw = Math.atan2(wind.x, wind.y);
+    for (const w of this.windmills) {
+      if (!w.parent) continue;
+      const head = w.getObjectByName('Head');
+      const rotor = w.getObjectByName('Rotor');
+      // Face into the wind: the wheel's axle (+Z) points upwind.
+      if (head) head.rotation.y = damp(head.rotation.y, windYaw + Math.PI - w.rotation.y, 0.5, dt);
+      if (rotor) rotor.rotation.z += dt * Math.min(9, ws * 0.45);
+    }
+    for (const p of this.pumpjacks) {
+      if (!p.group.parent || p.group.position.distanceToSquared(cam) > 2500 * 2500) continue;
+      p.phase += dt * p.speed;
+      posePumpjack(p.group, p.phase);
+    }
+    for (const p of this.pivots) if (p.group.parent) p.group.rotation.y += dt * p.speed;
+  }
+
   private applyTornado(t: Tornado): void {
     const reach = t.radius * 2.6 + 80;
     const tp = t.position;
+    // Landmarks.
+    for (const b of this.features) {
+      if (b.destroyed) continue;
+      const bp = b.obj.position;
+      if (Math.abs(bp.x - t.position.x) > reach + 250 || Math.abs(bp.z - t.position.z) > reach + 250) continue;
+      _p.set(bp.x, bp.y + 3, bp.z);
+      if (t.windAt(_p, _w).length() > b.strength) {
+        this.ruin(b, true, t);
+        this.onDestroyed?.(bp.clone(), b.label);
+      }
+    }
     // Buildings.
     for (const fs of this.farmsteads.values()) {
       if (Math.hypot(fs.center.x - tp.x, fs.center.y - tp.z) > reach + 150) continue;
@@ -598,8 +879,10 @@ export class WorldProps {
   private ruin(b: Building, animate: boolean, t?: Tornado): void {
     b.destroyed = true;
     this.colliders.remove(b.collider);
-    const parent = b.obj.parent;
+    const parent = b.display.parent;
+    if (parent) parent.remove(b.display);
     if (animate && t && parent) {
+      parent.add(b.obj);
       b.obj.updateMatrixWorld(true);
       const parts: THREE.Object3D[] = [];
       b.obj.traverse((o) => {
@@ -615,7 +898,7 @@ export class WorldProps {
         this.debris.throwObject(o, w.multiplyScalar(0.25 + Math.random() * 0.3).add(new THREE.Vector3(0, 6 + Math.random() * 10, 0)), mass);
       }
     }
-    if (parent) parent.remove(b.obj);
+    if (b.obj.parent) b.obj.parent.remove(b.obj);
     // Foundation slab left behind.
     const c = b.collider;
     const hx = c.type === 'box' ? c.hx : c.r;

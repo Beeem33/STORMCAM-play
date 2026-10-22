@@ -12,6 +12,8 @@ export class Walker {
   readonly vel = new THREE.Vector3();
   readonly eye = new THREE.Vector3();
   bob = 0;
+  /** Camera height above the feet (set from the body model's chest camera). */
+  camHeight = 1.48;
   moving = 0;
   /** 0..1 how hard the wind is pushing. */
   strain = 0;
@@ -62,7 +64,8 @@ export class Walker {
     this.moving = clamp(sp / 1.6, 0, 1.5);
     this.bob += dt * sp * 4.2;
     this.stillTime = sp < 0.15 ? this.stillTime + dt : 0;
-    this.eye.set(this.pos.x, this.pos.y + 1.62 - this.strain * 0.25, this.pos.z);
+    // Chest-mounted camera height; drops as he crouches into the wind.
+    this.eye.set(this.pos.x, this.pos.y + this.camHeight - this.strain * 0.25, this.pos.z);
   }
 
   private resolve(): void {

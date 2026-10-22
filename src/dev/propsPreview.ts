@@ -9,6 +9,7 @@ declare global {
     renderOnce: () => void;
     frameProp: (name: string) => void;
     propNames: () => string[];
+    viewAt: (name: string, dx: number, dy: number, dz: number, dist: number) => void;
   }
 }
 
@@ -140,6 +141,27 @@ for (const t of P.treeAssets()) {
   const mats = Array.from({ length: 6 }, (_, i) => new THREE.Matrix4().compose(new THREE.Vector3((i % 3) * 2.2, 0, -Math.floor(i / 3) * 3), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, r() * 0.6 - 0.3 + (i === 5 ? 1.5 : 0), 0)), new THREE.Vector3(1, 1, 1)));
   add('hay_bales', instanced(bale, mats), 7, assetTris(bale));
 }
+const animated: { windmills: THREE.Object3D[]; pumpjacks: THREE.Object3D[] } = { windmills: [], pumpjacks: [] };
+for (let i = 0; i < 2; i++) { const b = P.buildWindmill(mulberry32(70 + i)); animated.windmills.push(b.group); addBuild('windmill_' + i, b); }
+for (let i = 0; i < 2; i++) { const b = P.buildPumpjack(mulberry32(80 + i)); animated.pumpjacks.push(b.group); addBuild('pumpjack_' + i, b); }
+addBuild('stock_tank', P.buildStockTank(mulberry32(5)));
+for (let i = 0; i < 2; i++) addBuild('hay_stack_' + i, P.buildHayStack(mulberry32(90 + i * 3)));
+for (let i = 0; i < 2; i++) addBuild('truck_' + i, P.buildAbandonedTruck(mulberry32(100 + i * 7)));
+for (let i = 0; i < 2; i++) addBuild('billboard_' + i, P.buildBillboard(mulberry32(110 + i * 2)));
+addBuild('barricade_roadClosed', P.buildBarricade('roadClosed'));
+addBuild('barricade_endOfMap', P.buildBarricade('endOfMap'));
+addBuild('church', P.buildChurch(mulberry32(120)));
+addBuild('water_tower', P.buildWaterTower(mulberry32(130), 'Cedar Flats'));
+for (let i = 0; i < 2; i++) addBuild('grain_elevator_' + i, P.buildGrainElevator(mulberry32(140 + i * 5)));
+{
+  const b = P.buildCenterPivot(mulberry32(150), 4);
+  let spanTris = 0;
+  b.group.children.forEach((c) => { if (c.name === 'span_0' || c.name === 'tower_0' || c.name === 'wheels_0' || c.name === 'drops_0' || c.name === 'tower_box_0') spanTris += P.triCount(c); });
+  console.log('center pivot per-span tris', spanTris);
+  (window as unknown as { pivotSpanTris: number }).pivotSpanTris = spanTris;
+  b.group.position.z = -60;
+  add('center_pivot', b.group, 8);
+}
 const buildMs = performance.now() - t0;
 
 function renderOnce(): void {
@@ -163,6 +185,17 @@ function frameProp(name: string): void {
   sun.shadow.camera.updateProjectionMatrix();
   renderOnce();
 }
+window.viewAt = (name: string, dx: number, dy: number, dz: number, dist: number) => {
+  const e = entries.find((q) => q.name === name);
+  if (!e) return;
+  const p = e.obj.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(dx, dy, dz));
+  camera.position.set(p.x + dist * 0.6, p.y + dist * 0.25, p.z + dist * 0.75);
+  controls.target.copy(p);
+  controls.update();
+  sun.target.position.copy(p);
+  sun.position.copy(p).add(new THREE.Vector3(-40, 70, 50));
+  renderOnce();
+};
 window.renderOnce = renderOnce;
 window.frameProp = frameProp;
 window.propNames = () => entries.map((e) => e.name);
@@ -182,5 +215,13 @@ window.addEventListener('resize', () => {
   renderOnce();
 });
 frameProp('farmhouse_0');
-const loop = () => { requestAnimationFrame(loop); controls.update(); renderOnce(); };
+let tAnim = 0;
+const loop = () => {
+  requestAnimationFrame(loop);
+  tAnim += 1 / 60;
+  for (const w of animated.windmills) { const r = w.getObjectByName('Rotor'); if (r) r.rotation.z = tAnim * 3; }
+  for (const p of animated.pumpjacks) P.posePumpjack(p, tAnim * 1.2);
+  controls.update();
+  renderOnce();
+};
 loop();

@@ -24,7 +24,7 @@ export interface UpgradeDef {
 
 export const UPGRADES: UpgradeDef[] = [
   { id: 'actionCam', name: '4K action camera', category: 'Camera', price: 1800, blurb: 'Cleaner low-light image. Footage sells for 20% more.' },
-  { id: 'gimbal', name: 'Handheld gimbal', category: 'Camera', price: 1200, blurb: 'Steadier handheld footage, even in strong wind.' },
+  { id: 'gimbal', name: 'Stabilised chest mount', category: 'Camera', price: 1200, blurb: 'Steadier bodycam footage, even in strong wind.' },
   { id: 'tripod', name: 'Heavy tripod', category: 'Camera', price: 600, blurb: 'Rock-steady shots when you stand still outside.' },
   { id: 'anemometer', name: 'Roof anemometer readout', category: 'Instruments', price: 900, blurb: 'Live wind speed on the dash.' },
   { id: 'radarPro', name: 'Pro radar subscription', category: 'Instruments', price: 1500, blurb: 'Radar refreshes twice as often.' },

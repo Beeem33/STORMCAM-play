@@ -8,6 +8,7 @@ export interface SettingsData {
   lensDistortion: boolean;
   timestamp: boolean;
   fov: number;
+  bodycamFov: number;
   mouseSensitivity: number;
   invertY: boolean;
   masterVolume: number;
@@ -16,7 +17,7 @@ export interface SettingsData {
 }
 
 const DEFAULTS: SettingsData = {
-  renderScale: 0.85,
+  renderScale: 0.75,
   cloudQuality: 'medium',
   motionBlur: true,
   sensorNoise: 1,
@@ -24,6 +25,7 @@ const DEFAULTS: SettingsData = {
   lensDistortion: true,
   timestamp: true,
   fov: 72,
+  bodycamFov: 90,
   mouseSensitivity: 1,
   invertY: false,
   masterVolume: 0.8,
@@ -72,9 +74,9 @@ export class Settings {
   }
 
   cloudSteps(): number {
-    return this.data.cloudQuality === 'low' ? 26 : this.data.cloudQuality === 'medium' ? 40 : 60;
+    return this.data.cloudQuality === 'low' ? 20 : this.data.cloudQuality === 'medium' ? 30 : 46;
   }
   skyDivisor(): number {
-    return this.data.cloudQuality === 'high' ? 2 : 3;
+    return this.data.cloudQuality === 'high' ? 3 : this.data.cloudQuality === 'medium' ? 3.5 : 4;
   }
 }

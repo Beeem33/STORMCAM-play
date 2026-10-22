@@ -4,11 +4,12 @@ import { atmo, patchObject } from '../rendering/Atmosphere';
 import { Terrain } from '../environment/Terrain';
 import { Lighting } from '../environment/Lighting';
 import { WorldProps } from '../environment/WorldProps';
-import { buildVehicleModel, CG_HEIGHT, DRIVER_DOOR, type VehicleParts } from '../vehicle/VehicleModel';
+import { CG_HEIGHT, DRIVER_DOOR, type VehicleParts } from '../vehicle/VehicleModel';
 import { Vehicle, type DriveInput } from '../vehicle/Vehicle';
 import { Windshield } from '../vehicle/Windshield';
 import { CameraRig, LENSES } from '../camera/CameraRig';
 import { Walker } from '../player/Walker';
+import { PlayerBody } from '../player/PlayerBody';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -23,6 +24,7 @@ import { AudioSystem } from '../audio/AudioSystem';
 import type { AudioFrameState } from '../audio/AudioTypes';
 import { UI, type HudState } from '../ui/UI';
 import { clamp, damp, MPS_TO_MPH } from '../utils/MathUtils';
+import { MAP_HALF } from '../environment/WorldShape';
 
 export type GameState = 'menu' | 'playing' | 'paused' | 'report';
 
@@ -54,6 +56,7 @@ export class Game {
   readonly windshield: Windshield;
   readonly rig = new CameraRig();
   readonly walker = new Walker();
+  readonly body = new PlayerBody();
   readonly weather = new WeatherSystem();
   readonly precip = new Precipitation();
   readonly lightning = new Lightning();
@@ -85,7 +88,7 @@ export class Game {
   private warnedTornado = 0;
   private warningToasted = false;
 
-  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
+  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, parts: VehicleParts) {
     this.renderer = new Renderer(canvas);
     this.input = new Input(canvas);
     this.scene.fog = new THREE.FogExp2(0x888888, 0.0001);
@@ -94,10 +97,11 @@ export class Game {
     this.world = new WorldProps(this.tornadoes.debris);
     this.scene.add(this.world.group, this.precip.group, this.lightning.group, this.tornadoes.group);
 
-    this.parts = buildVehicleModel();
+    this.parts = parts;
     this.vehicleObj.add(this.parts.root);
-    this.scene.add(this.vehicleObj);
+    this.scene.add(this.vehicleObj, this.body.root);
     patchObject(this.vehicleObj);
+    this.body.load().catch((e) => console.warn('[body] chaser body unavailable', e));
     this.windshield = new Windshield(this.parts);
     this.vehicle.colliders = this.world.query;
     this.walker.colliders = this.world.query;
@@ -288,7 +292,7 @@ export class Game {
     this.radar.interval = eff.radarInterval;
     this.vehicle.offroadGrip = eff.offroadGrip;
     this.vehicle.damageScale = eff.impactDamage;
-    this.tornadoes.renderer.steps = s.cloudQuality === 'low' ? 70 : s.cloudQuality === 'medium' ? 110 : 150;
+    this.tornadoes.renderer.steps = s.cloudQuality === 'low' ? 44 : s.cloudQuality === 'medium' ? 64 : 96;
   }
 
   resize(): void {
@@ -300,12 +304,33 @@ export class Game {
   }
 
   start(): void {
+    let acc = 0;
+    let frames = 0;
+    let goodWindows = 0;
     const tick = () => {
       requestAnimationFrame(tick);
       const now = performance.now();
-      const dt = Math.min(0.05, (now - this.last) / 1000);
+      const raw = now - this.last;
+      const dt = Math.min(0.05, raw / 1000);
       this.last = now;
-      if (this.running) this.frame(dt);
+      if (!this.running) return;
+      this.frame(dt);
+      // Adaptive resolution from real frame times (ignore hitches over 100 ms, e.g. tab switches).
+      if (raw < 100 && (this.state === 'playing' || this.state === 'menu')) {
+        acc += raw;
+        frames++;
+        if (acc > 1000) {
+          const avg = acc / frames;
+          // Only step up after a few calm seconds in a row.
+          goodWindows = avg < 12.5 ? goodWindows + 1 : 0;
+          if (avg > 19 || goodWindows >= 3) {
+            this.renderer.adaptResolution(avg);
+            if (goodWindows >= 3) goodWindows = 0;
+          }
+          acc = 0;
+          frames = 0;
+        }
+      }
     };
     requestAnimationFrame(tick);
   }
@@ -346,6 +371,7 @@ export class Game {
       this.coreHazard(sdt, t);
       const bx = this.vehicle.pos.x, bz = this.vehicle.pos.z;
       this.vehicle.update(sdt, drive);
+      this.keepInChaseArea(this.vehicle.pos, this.vehicle.vel);
       this.distanceDriven += Math.hypot(this.vehicle.pos.x - bx, this.vehicle.pos.z - bz);
     }
     this.vehicle.writeTransform(this.vehicleObj);
@@ -359,6 +385,14 @@ export class Game {
       const yawCar = this.vehicle.heading;
       this.walker.car = { x: this.vehicle.pos.x, z: this.vehicle.pos.z, rot: -yawCar, hx: 1.0, hz: 2.55 };
       this.walker.update(sdt, { fwd, right, run: inp.isDown('ShiftLeft') || inp.isDown('ShiftRight') }, this.rig.yaw, _w);
+      this.keepInChaseArea(this.walker.pos, this.walker.vel);
+    }
+    // The chaser's body: animated from his speed and the wind; the bodycam rides its chest mount.
+    const speedOnFoot = Math.hypot(this.walker.vel.x, this.walker.vel.z);
+    this.body.update(sdt, this.onFoot && !this.walker.dead, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain);
+    if (this.onFoot && this.body.chestCamPosition(_v)) {
+      // Sit the lens just proud of the jacket.
+      this.walker.eye.copy(_v).add(new THREE.Vector3(-Math.sin(this.rig.torsoYaw), 0, -Math.cos(this.rig.torsoYaw)).multiplyScalar(0.06));
     }
 
     // --- Camera.
@@ -372,11 +406,12 @@ export class Game {
     const shake = this.settings.data.cameraShake * (this.onFoot ? eff.handheldShake : 1);
     this.rig.update({
       dt, time: this.time, vehicleObj: this.vehicleObj, vehicle: this.vehicle,
-      walker: this.onFoot ? this.walker : null,
+      walker: this.onFoot ? { eye: this.walker.eye, bob: this.walker.bob, moving: this.walker.moving, animated: this.body.loaded } : null,
       mouseDX: playing ? inp.mouseDX : 0, mouseDY: playing ? inp.mouseDY : 0, wheel: playing ? inp.wheel : 0,
       zoomHeld: inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
       shake: this.onFoot && eff.tripod && this.walker.stillTime > 1.5 ? shake * 0.1 : shake,
       fov: this.settings.data.fov, wind: this.windAtCam.length(), impulse: this.shakeImpulse,
+      bodycamFov: this.settings.data.bodycamFov,
     });
     const cam = this.rig.camera;
     this.camVel.subVectors(cam.position, this.prevCam).divideScalar(Math.max(dt, 1e-3));
@@ -386,6 +421,7 @@ export class Game {
 
     // --- World streaming and destruction.
     this.world.update(sdt, cam.position, playing ? t : null);
+    this.world.animate(sdt, cam.position, atmo.uWind.value);
 
     // --- Lighting, sky, atmosphere.
     this.lightning.baseAlt = baseAlt;
@@ -393,7 +429,7 @@ export class Game {
     const tornadoDist = t ? t.distanceTo(cam.position) : 1e9;
     const dust = t ? t.debris * t.params.debrisDensity * clamp(1 - (tornadoDist - t.radius) / (t.radius * 6 + 300), 0, 1) : 0;
     atmo.uDust.value = damp(atmo.uDust.value, dust, 2, dt);
-    this.lighting.update(cam.position, L.cover, L.sunBlocked, L.rain, this.lightning.flash, this.lightning.flashDir);
+    this.lighting.update(cam.position, L.cover, L.sunBlocked, L.rain, this.lightning.flash);
     const sky = this.renderer.sky;
     sky.setParams(this.lighting.sky);
     sky.setStorms(this.weather.storms, t ? { x: t.position.x, z: t.position.z, radius: t.radius, presence: Math.min(1, t.presence * 1.2) } : null);
@@ -479,6 +515,25 @@ export class Game {
     }
   }
 
+  /** The chase area ends a little past the perimeter roads (the barricades); push back softly. */
+  private keepInChaseArea(p: THREE.Vector3, v: THREE.Vector3): void {
+    const lim = MAP_HALF + 45;
+    let hit = false;
+    for (const axis of ['x', 'z'] as const) {
+      const over = Math.abs(p[axis]) - lim;
+      if (over > 0) {
+        p[axis] -= Math.sign(p[axis]) * over;
+        if (Math.sign(v[axis]) === Math.sign(p[axis])) v[axis] *= -0.2;
+        hit = true;
+      }
+    }
+    if (hit && this.time - this.boundaryToast > 6) {
+      this.boundaryToast = this.time;
+      this.ui.toast('Roads are closed beyond here — edge of the chase area.');
+    }
+  }
+  private boundaryToast = -100;
+
   private handleKeys(): void {
     const inp = this.input;
     if (inp.wasPressed('KeyQ')) {
@@ -526,7 +581,7 @@ export class Game {
       const d = this.doorWorld(new THREE.Vector3());
       this.walker.placeAt(d.x, d.z);
       this.onFoot = true;
-      this.rig.setMode('handheld');
+      this.rig.setMode('bodycam');
       this.rig.yaw = this.vehicle.heading * -1;
       this.rig.pitch = 0;
       this.audio.door(true);
@@ -632,8 +687,15 @@ export class Game {
     if (v.destroyed && !this.onFoot) center = 'Vehicle disabled';
     if (this.onFoot && this.walker.dead) center = 'Caught in the tornado';
 
-    const camLabel = this.rig.mode === 'driver' ? 'DRIVER CAM' : this.rig.mode === 'dashcam' ? 'DASHCAM' : `PHONE  ${this.rig.zoom.toFixed(1)}×`;
+    const camLabel = this.rig.mode === 'driver' ? 'DRIVER CAM' : this.rig.mode === 'dashcam' ? 'DASHCAM' : this.rig.zoom > 1.05 ? `BODYCAM  ${this.rig.zoom.toFixed(1)}×` : 'BODYCAM';
     let osd = '';
+    if (this.rig.mode === 'bodycam' && this.settings.data.timestamp) {
+      const s = DAY_START_SECONDS + this.dayTime;
+      const hh = String(Math.floor(s / 3600) % 24).padStart(2, '0');
+      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+      const ss = String(Math.floor(s % 60)).padStart(2, '0');
+      osd = `BODYCAM X3  2026-05-22 T${hh}:${mm}:${ss} -05:00`;
+    }
     if (this.rig.mode === 'dashcam' && this.settings.data.timestamp) {
       const s = DAY_START_SECONDS + this.dayTime;
       const hh = String(Math.floor(s / 3600) % 24).padStart(2, '0');
@@ -693,14 +755,26 @@ export class Game {
       g.rotation.y = i < 2 ? -v.steerAngle : 0;
       (g.children[0] as THREE.Object3D).rotation.x = -w.spinAngle;
     }
-    p.steeringWheel.rotation.z = -v.steerInput * 2.4;
+    if (p.steeringBase && p.steeringAxis) {
+      p.steeringWheel.quaternion.copy(p.steeringBase).multiply(new THREE.Quaternion().setFromAxisAngle(p.steeringAxis, -v.steerInput * 2.4));
+    } else p.steeringWheel.rotation.z = -v.steerInput * 2.4;
     const mph = Math.abs(v.forwardSpeed) * MPS_TO_MPH;
-    p.speedNeedle.rotation.z = -(Math.PI * 0.75 + (Math.min(mph, 120) / 120) * Math.PI * 1.5) + Math.PI / 2;
-    p.tachNeedle.rotation.z = -(Math.PI * 0.75 + (Math.min(v.rpm, 6000) / 6000) * Math.PI * 1.5) + Math.PI / 2;
     const hl = this.headlightsOn ? 1 : 0;
+    if (p.gauges) p.gauges.update(mph, v.rpm, hl > 0);
+    else {
+      p.speedNeedle.rotation.z = -(Math.PI * 0.75 + (Math.min(mph, 120) / 120) * Math.PI * 1.5) + Math.PI / 2;
+      p.tachNeedle.rotation.z = -(Math.PI * 0.75 + (Math.min(v.rpm, 6000) / 6000) * Math.PI * 1.5) + Math.PI / 2;
+    }
+    if (p.ledMat) p.ledMat.emissiveIntensity = hl * 8;
     const boost = this.career.effects.headlights;
     p.headlightMat.emissiveIntensity = hl * 6;
-    for (const s of p.headlights) s.intensity = hl * 900 * boost;
+    for (const s of p.headlights) {
+      s.intensity = 900 * boost;
+      // Invisible lights are left out of every shader; toggling recompiles once.
+      s.visible = hl > 0;
+    }
+    p.dashLight.visible = hl > 0;
+    p.dashLight.intensity = 0.6;
     p.gaugeMat.emissiveIntensity = 0.06 + hl * 0.5;
     p.taillightMat.emissiveIntensity = 0.4 + (this.input.isDown('KeyS') && !this.onFoot ? 3 : 0) + hl;
     p.anemometer.rotation.y += dt * Math.min(40, this.windAtCam.length() * 1.6 + v.speed * 1.2);

@@ -1,5 +1,5 @@
 import { stormReflectivity, type StormCell } from '../weather/StormModel';
-import { MILE, isPaved } from '../environment/WorldShape';
+import { MAP_HALF, MILE, isPaved } from '../environment/WorldShape';
 import type { Tornado } from '../tornado/Tornado';
 
 /**
@@ -213,6 +213,15 @@ export class Radar {
       }
     }
 
+    // Chase-area boundary.
+    {
+      const [ax, az] = toPx(-MAP_HALF, -MAP_HALF);
+      ctx.strokeStyle = 'rgba(255,210,58,0.55)';
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ax, az, MAP_HALF * 2 * scale, MAP_HALF * 2 * scale);
+      ctx.setLineDash([]);
+    }
     // Range rings (10 mi).
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.lineWidth = 1;

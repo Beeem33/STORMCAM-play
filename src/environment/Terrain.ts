@@ -11,7 +11,7 @@ import { getNoise2D } from '../rendering/NoiseTextures';
  * the fragment shader, so there are no road meshes to keep in sync.
  */
 
-const N = 560;
+const N = 440;
 const K = 7.2;
 const EXTENT = 20000;
 
@@ -104,9 +104,9 @@ void groundShade(vec3 wp, float pix, out vec3 albedo, out float rough, out vec2 
   } else if (ft == 2) { // plowed / planted bare soil
     vec3 soil = vec3(0.16, 0.115, 0.075);
     float furrow = stripes(rowCoord, 0.76, 0.45, pix);
-    field = soil * (0.82 + 0.25 * furrow) * (0.85 + 0.3 * nSm.r);
+    field = soil * (0.9 + 0.14 * furrow) * (0.85 + 0.3 * nSm.r);
     fieldRough = 1.0;
-    tilt += vec2(rowsAlongX ? 0.0 : (furrow - 0.5) * 0.25, rowsAlongX ? (furrow - 0.5) * 0.25 : 0.0) * fineFade;
+    tilt += vec2(rowsAlongX ? 0.0 : (furrow - 0.5) * 0.12, rowsAlongX ? (furrow - 0.5) * 0.12 : 0.0) * fineFade;
   } else if (ft == 3) { // young row crop
     vec3 soil = vec3(0.15, 0.11, 0.07);
     vec3 crop = vec3(0.055, 0.085, 0.03);
@@ -252,10 +252,11 @@ ${WORLD_GLSL}`,
           '#include <beginnormal_vertex>',
           `vec2 wxz = uGridCenter + position.xz;
 float hC = w_height(wxz);
-float eps = max(0.25, length(position.xz) * 0.012);
-float hX = w_height(wxz + vec2(eps, 0.0)) - w_height(wxz - vec2(eps, 0.0));
-float hZ = w_height(wxz + vec2(0.0, eps)) - w_height(wxz - vec2(0.0, eps));
-vec3 objectNormal = normalize(vec3(-hX, 2.0 * eps, -hZ));
+float eps = max(0.3, length(position.xz) * 0.015);
+// Forward differences: 3 height evaluations per vertex instead of 5.
+float hX = w_height(wxz + vec2(eps, 0.0)) - hC;
+float hZ = w_height(wxz + vec2(0.0, eps)) - hC;
+vec3 objectNormal = normalize(vec3(-hX, eps, -hZ));
 vWorldPosG = vec3(wxz.x, hC, wxz.y);
 vWorldNormalG = objectNormal;
 #ifdef USE_TANGENT

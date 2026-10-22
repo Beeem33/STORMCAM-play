@@ -49,7 +49,7 @@ export interface TexSet {
 const to8 = (v: number): number => (v <= 0 ? 0 : v >= 1 ? 255 : Math.round(v * 255));
 
 /** Float image: colour (sRGB 0..1), height (metres) and roughness. */
-class Img {
+export class Img {
   readonly w: number;
   readonly h: number;
   readonly col: Float32Array;
@@ -125,7 +125,7 @@ class Img {
 }
 
 /** Precomputed tileable fBm tile, sampled bilinearly with wrap (fast). */
-class NoiseTile {
+export class NoiseTile {
   readonly d = new Float32Array(256 * 256);
   constructor(seed: number) {
     let mn = Infinity, mx = -Infinity;
@@ -149,7 +149,7 @@ class NoiseTile {
     return a + (b - a) * fx + (c - a) * fy + (a - b - c + e) * fx * fy;
   }
 }
-const nt = (i: number): NoiseTile => memo('nt' + i, () => new NoiseTile(9001 + i * 131));
+export const nt = (i: number): NoiseTile => memo('nt' + i, () => new NoiseTile(9001 + i * 131));
 
 // ---------------------------------------------------------------- text helpers (signs, gas station)
 
@@ -790,4 +790,57 @@ export function doorAtlas(): TexSet {
       }
     }),
   );
+}
+
+// ---------------------------------------------------------------- additions (decor set)
+
+function hexRGB(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+/** Faded, chalky paint with surface-rust patches (rust keeps its own colour). Tile 2 m. */
+export function rustyPaintTex(hex: string, rustAmt = 0.5): TexSet {
+  return memo('t:rustypaint:' + hex + ':' + rustAmt, () => {
+    const W = 512, H = 512, im = new Img(W, H), n1 = nt(31), n2 = nt(32), n3 = nt(33);
+    const [pr, pg, pb] = hexRGB(hex);
+    const thr = 0.9 - rustAmt * 0.32;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const u = x / W, v = y / H, g = hash4(x, y, 3, 17);
+        const chalk = n1.at(u * 2, v * 2), fine = n3.at(u * 16, v * 16);
+        const k = 0.88 + 0.12 * (fine - 0.5) + 0.03 * (g - 0.5);
+        let r = (pr + (0.78 - pr) * chalk * 0.35) * k, gg = (pg + (0.76 - pg) * chalk * 0.35) * k, b = (pb + (0.72 - pb) * chalk * 0.35) * k;
+        let ro = 0.62 + 0.2 * chalk, h = 0.0004 * fine;
+        const rust = n2.at(u * 3, v * 3) + 0.35 * (fine - 0.5) + 0.12 * (n1.at(u * 8, v) - 0.5);
+        if (rust > thr) {
+          const t = clamp((rust - thr) * 6, 0, 1), dark = 0.75 + 0.35 * g;
+          r += (0.42 * dark - r) * t; gg += (0.24 * dark - gg) * t; b += (0.14 * dark - b) * t;
+          ro += (0.92 - ro) * t; h += 0.0015 * t * g;
+        }
+        im.px(x, y, r, gg, b, h, ro);
+      }
+    return im.set(2, 2, 0.6);
+  });
+}
+
+/** Slipform concrete (grain elevators): smooth, faint lift lines, vertical weather streaks. Tile 4 x 8 m. */
+export function slipformTex(): TexSet {
+  return memo('t:slipform', () => {
+    const W = 256, H = 512, im = new Img(W, H), n1 = nt(34), n2 = nt(35), n3 = nt(36);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const u = x / W, v = y / H, g = hash4(x, y, 7, 7);
+        let c = 0.74 + 0.06 * (n1.at(u * 2, v * 4) - 0.5) + 0.03 * (g - 0.5);
+        const lift = y % 64;
+        if (lift < 2) c *= 0.97;
+        const s = n2.at(u * 3, v) * 0.7 + n1.at(u * 7, v * 2) * 0.3;
+        if (s > 0.55) c *= 1 - (s - 0.55) * 0.55;
+        const st = n3.at(u * 4, v);
+        let r = c, gg = c * 0.985, b = c * 0.95;
+        if (st > 0.7) { const t = (st - 0.7) * 2; r *= 1 - t * 0.1; gg *= 1 - t * 0.16; b *= 1 - t * 0.26; }
+        im.px(x, y, r, gg, b, (lift < 2 ? -0.002 : 0) + 0.0005 * g, 0.9);
+      }
+    return im.set(4, 8, 0.6);
+  });
 }

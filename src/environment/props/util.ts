@@ -260,3 +260,33 @@ export function triCount(o: THREE.Object3D): number {
   });
   return t;
 }
+
+const _UP = new THREE.Vector3(0, 1, 0);
+/** Box strut (w x d cross-section) from a to b, metric UVs. */
+export function strut(a: THREE.Vector3, b: THREE.Vector3, w: number, d = w): THREE.BufferGeometry {
+  const dir = b.clone().sub(a);
+  const len = Math.max(1e-4, dir.length());
+  const g = box(w, len, d);
+  g.translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(_UP, dir.normalize()));
+  g.translate(a.x, a.y, a.z);
+  return g;
+}
+/** Round rod from a to b. */
+export function rod(a: THREE.Vector3, b: THREE.Vector3, r: number, segs = 6, open = true, r2 = r): THREE.BufferGeometry {
+  const dir = b.clone().sub(a);
+  const len = Math.max(1e-4, dir.length());
+  const g = cyl(r2, r, len, segs, open);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(_UP, dir.normalize()));
+  g.translate(a.x, a.y, a.z);
+  return g;
+}
+/** Single quad a,b,c,d (counter-clockwise seen from the front) with uv 0..1. */
+export function quad(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3, uv: Rect = [0, 0, 1, 1]): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z]), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([uv[0], uv[1], uv[2], uv[1], uv[2], uv[3], uv[0], uv[3]]), 2));
+  g.setIndex([0, 1, 2, 0, 2, 3]);
+  g.computeVertexNormals();
+  return g;
+}

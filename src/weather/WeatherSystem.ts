@@ -63,11 +63,13 @@ export class WeatherSystem {
     const flowAng = THREE.MathUtils.degToRad(40 + r() * 25); // bearing the storms move TOWARD (NE-ish)
     const speed = 7.5 + r() * 3 + Math.min(3, sc.day * 0.3);
     const tornadicIdx = Math.floor(r() * count);
+    // Storms fire upstream (south-west) and their tracks cross the 4 × 4-mile chase area.
+    const fx = Math.sin(flowAng), fz = -Math.cos(flowAng);
     for (let i = 0; i < count; i++) {
-      const bearing = THREE.MathUtils.degToRad(205 + i * 28 + (r() - 0.5) * 20); // where it sits, from the player
-      const dist = 9000 + r() * 6000 + i * 1500;
-      const x = start.x + Math.sin(bearing) * dist;
-      const z = start.z - Math.cos(bearing) * dist;
+      const upstream = 5000 + r() * 2000 + i * 1200;
+      const lateral = (i - (count - 1) / 2) * 3600 + (r() - 0.5) * 1500;
+      const x = start.x - fx * upstream + -fz * lateral;
+      const z = start.z - fz * upstream + fx * lateral;
       const tornadic = i === tornadicIdx || r() < 0.18;
       const s: StormCell = {
         id: i + 1,
