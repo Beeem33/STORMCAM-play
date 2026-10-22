@@ -46,7 +46,7 @@ What exists in the code today, and what doesn't. Updated with each milestone.
     (`public/models/chaser_person.glb`, built in Blender by
     `models/chaser_person_build.py` outside this repo), so the walk and run
     cycles move the shot. Looking down shows the jacket, legs, boots and
-    hands; the head is hidden. The model is still a draft export.
+    hands; the head is hidden.
   - All shake is scaled by a setting.
 - **Camera sensor post-processing:** auto exposure that lags (lightning blows
   out), filmic tone curve, sharpening, sensor noise that grows in the
@@ -88,10 +88,15 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   controls, pause, report, garage.
 
 ### Unfinished or simplified
-- **SUV model:** the current export is a draft (about 200k triangles, over
-  budget, paint still blue-grey). The modeller is cutting it to 80k and
-  switching to matte black. Cabin trim is brightened 2.5× in the loader
-  because there's no bounce light inside the car.
+- **SUV model:** about 79k triangles. Cabin trim is brightened 2.5× in the
+  loader because there's no bounce light inside the car, and the body shell
+  is drawn double-sided so the A-pillars are solid from inside. Brake
+  calipers don't steer with the front wheels; tail lamps are painted zones,
+  not separate lenses; the interior has no seatbelts.
+- **Player body:** about 44k triangles. Looking down from the true chest-lens
+  position shows only boot toes, so the lens leans forward over the feet as
+  you look down. Clothing is skinned, not simulated; the head is simplified
+  because it's hidden in first person.
 - **Windshield droplets:** shading is basic. They refract and darken, with
   a faint rim highlight.
 - **Trees:** solid noisy crowns. They read well from 20 m out but look smooth
@@ -112,7 +117,9 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   The garage is in the menu and report screens.
 - **Mobile:** no touch controls. The game targets desktop browsers.
 - **Audio:** levels were measured offline, not tuned by ear.
-- **Performance:** tuned for an Apple M4 laptop.
+- **Performance:** tuned for an Apple M4 laptop. With a tornado on screen,
+  a GPU-synced frame takes about 17–21 ms at 1620×1013 internal resolution
+  (first prototype: about 50 ms at 1836×1148).
   - Adaptive resolution steps the render scale down when frames run long and
     back up when there's headroom.
   - The storm fields are baked to a texture once per frame for the sky

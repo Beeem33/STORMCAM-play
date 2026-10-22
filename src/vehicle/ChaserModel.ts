@@ -147,7 +147,12 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   });
   const mat = (n: string) => mats.get(n) ?? new THREE.MeshStandardMaterial();
   const paint = mat('Paint');
-  paint.envMapIntensity = 0.8;
+  // Satin rather than dead flat, so the black hood catches a soft sky sheen from the seat.
+  paint.roughness = Math.min(paint.roughness, 0.34);
+  paint.envMapIntensity = 1.0;
+  // The body shell is single-sided; from the cabin the A-pillars would show the sky through them.
+  paint.side = THREE.DoubleSide;
+  mat('Trim').side = THREE.DoubleSide;
   const glassMat = mat('Glass');
   glassMat.envMapIntensity = 1.2;
   for (const [n, m] of mats) {
