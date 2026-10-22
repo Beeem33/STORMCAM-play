@@ -33,6 +33,11 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   (an intercept). The day report sells the data: up to about $4,000 for a
   near miss within 500 m of the vortex edge, more for an intercept and for
   stronger tornadoes. Each lost probe costs $250 to replace.
+- **Ending a day:** only the chaser's death ends it: caught on foot, or
+  carried up by the vortex inside the truck. A rolled truck is rocked back
+  onto its wheels after 3 s; at 0% health it's wrecked but limps on at about
+  a third of its power. When the storms die out, a message says to end the
+  chase from the pause menu to get paid.
 - **Day pacing:** the day's main storm starts mature about 3 km upstream on a
   track that crosses the start area, and drops its tornado about 10 s in.
   Tornadoes form over 30 s and stay mature for 7–12 minutes.

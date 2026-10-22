@@ -199,20 +199,23 @@ export class Vehicle {
       w.center.set(w.hard.x, w.hard.y - w.length, w.hard.z);
     }
 
-    // Upside down or on the side for too long = disabled.
+    // On its side or roof and settled: rock it back onto its wheels (a chase
+    // crew would winch or push it over) rather than ending the day.
     _v1.set(0, 1, 0).applyQuaternion(this.quat);
-    if (_v1.y < 0.25) this.flippedTime += dt;
+    if (_v1.y < 0.25 && this.vel.length() < 2.5) this.flippedTime += dt;
     else this.flippedTime = Math.max(0, this.flippedTime - dt * 2);
-    if (this.flippedTime > 2.5 && !this.destroyed) {
-      this.destroyed = true;
-      this.health = 0;
+    if (this.flippedTime > 3) {
+      this.placeAt(this.pos.x, this.pos.z, this.heading);
+      this.damage(8);
+      this.onRighted?.();
     }
     // Sustained violent wind strips trim and breaks glass.
     const windRel = Math.hypot(this.wind.x - this.vel.x, this.wind.z - this.vel.z);
-    if (windRel > 45) {
-      this.damage((windRel - 45) * 0.18 * dt);
-      this.windshieldCracks = Math.min(1, this.windshieldCracks + (windRel - 45) * 0.002 * dt);
+    if (windRel > 55) {
+      this.damage((windRel - 55) * 0.1 * dt);
+      this.windshieldCracks = Math.min(1, this.windshieldCracks + (windRel - 55) * 0.002 * dt);
     }
+    // At 0% the truck is wrecked but still limps along on reduced power.
     if (this.health <= 0) this.destroyed = true;
   }
 
@@ -268,7 +271,7 @@ export class Vehicle {
     const fwdSpeed = this.vel.dot(fwd);
     const ratio = this.gear < 0 ? REVERSE : GEARS[Math.max(0, this.gear - 1)];
     const shifting = this.shiftTimer > 0 && this.gear > 0;
-    const driveTorque = this.engineOn && !shifting ? torqueAt(this.rpm) * this.throttle * ratio * FINAL * 0.82 * (this.rpm > REDLINE ? 0.2 : 1) : 0;
+    const driveTorque = this.engineOn && !shifting ? torqueAt(this.rpm) * this.throttle * ratio * FINAL * 0.82 * (this.rpm > REDLINE ? 0.2 : 1) * (this.destroyed ? 0.35 : 1) : 0;
     const driveDir = this.gear < 0 ? -1 : 1;
     const braking = this.gear < 0 ? input.throttle : input.brake;
 
@@ -451,7 +454,7 @@ export class Vehicle {
       this.force.add(F);
       this.torque.add(new THREE.Vector3().crossVectors(rArm, F));
       if (vc.y < -4) {
-        this.damage(Math.abs(vc.y) * 3);
+        this.damage(Math.abs(vc.y) * 1.5);
         this.onImpact?.(Math.abs(vc.y), 'ground');
         this.jolt = 1;
       }
@@ -510,7 +513,7 @@ export class Vehicle {
           this.angVel.y += vn * 0.04 * Math.sign(off || 1) * (nx * fwd.z - nz * fwd.x);
           const impact = -vn;
           if (impact > 2) {
-            this.damage(impact > 6 ? (impact - 4) * 4.5 : 0);
+            this.damage(impact > 8 ? (impact - 6) * 2.5 : 0);
             this.onImpact?.(impact, 'collision');
             this.jolt = Math.min(1, this.jolt + impact * 0.08);
           }
@@ -526,6 +529,9 @@ export class Vehicle {
     this.angVel.add(dw);
     this.jolt = 1;
   }
+
+  /** Called after a rolled truck has been put back on its wheels. */
+  onRighted: (() => void) | null = null;
 
   damage(amount: number): void {
     if (amount <= 0 || this.destroyed) return;

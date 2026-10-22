@@ -26,7 +26,7 @@ import { AudioSystem } from '../audio/AudioSystem';
 import type { AudioFrameState } from '../audio/AudioTypes';
 import { UI, type HudState } from '../ui/UI';
 import { clamp, damp, MPS_TO_MPH } from '../utils/MathUtils';
-import { MAP_HALF } from '../environment/WorldShape';
+import { MAP_HALF, heightAt } from '../environment/WorldShape';
 
 export type GameState = 'menu' | 'playing' | 'paused' | 'report';
 
@@ -88,6 +88,10 @@ export class Game {
   private shakeImpulse = 0;
   private endTimer = -1;
   private endReason = '';
+  /** The truck was carried up by the vortex with the chaser inside. */
+  private driverKilled = false;
+  private wreckToasted = false;
+  private calmToasted = false;
   private distanceDriven = 0;
   private menuYaw = 0;
   private readonly audioState: AudioFrameState;
@@ -113,6 +117,9 @@ export class Game {
     this.probes = new ProbeSystem(this.parts, this.tornadoes);
     this.scene.add(this.probes.group);
     this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
+    this.vehicle.onRighted = () => {
+      if (this.state === 'playing') this.ui.toast('You rock the truck back onto its wheels.', 'info', 4000);
+    };
     this.walker.colliders = this.world.query;
 
     this.audioState = {
@@ -181,7 +188,7 @@ export class Game {
     this.tornadoes.debris.onHit = (strength, pos) => {
       const eff = this.career.effects;
       if (!this.onFoot) {
-        this.vehicle.damage(strength * 9);
+        this.vehicle.damage(strength * 4);
         this.vehicle.windshieldCracks = Math.min(1, this.vehicle.windshieldCracks + strength * 0.08 * eff.glassDamage);
         this.shakeImpulse = Math.max(this.shakeImpulse, strength);
       }
@@ -221,6 +228,9 @@ export class Game {
     this.dayTime = 0;
     this.distanceDriven = 0;
     this.endTimer = -1;
+    this.driverKilled = false;
+    this.wreckToasted = false;
+    this.calmToasted = false;
     this.onFoot = false;
     this.rig.setMode('driver');
     this.rig.yaw = 0;
@@ -370,7 +380,7 @@ export class Game {
 
     // --- Vehicle.
     const drive: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: !this.onFoot ? false : true };
-    if (playing && !this.onFoot && !this.vehicle.destroyed) {
+    if (playing && !this.onFoot) {
       drive.throttle = inp.isDown('KeyW') || inp.isDown('ArrowUp') ? 1 : 0;
       drive.brake = inp.isDown('KeyS') || inp.isDown('ArrowDown') ? 1 : 0;
       drive.steer = (inp.isDown('KeyD') || inp.isDown('ArrowRight') ? 1 : 0) - (inp.isDown('KeyA') || inp.isDown('ArrowLeft') ? 1 : 0);
@@ -471,7 +481,7 @@ export class Game {
     this.windshield.update(sdt, L.rain, L.hail, this.vehicle.forwardSpeed, this.vehicle.windshieldCracks);
     if (L.hail > 0.2 && playing) {
       this.vehicle.windshieldCracks = Math.min(1, this.vehicle.windshieldCracks + sdt * L.hail * 0.006 * eff.glassDamage);
-      this.vehicle.damage(sdt * L.hail * 0.3);
+      this.vehicle.damage(sdt * L.hail * 0.15);
     }
     this.vehicleObj.updateMatrixWorld(true);
     this.windshield.syncProxies();
@@ -524,7 +534,10 @@ export class Game {
     const severity = clamp((t.params.rating + 0.5) / 4, 0.2, 1.4) * t.presence * (1 - t.rope * 0.5);
     if (d < R * 1.7) {
       const inner = clamp(1 - (d - R * 0.6) / (R * 1.1), 0, 1);
-      v.damage(dt * 9 * severity * inner);
+      // Lifted well off the ground inside the vortex: nobody survives that ride.
+      const lift = v.pos.y - CG_HEIGHT - heightAt(v.pos.x, v.pos.z);
+      if (!this.onFoot && inner > 0.3 && lift > 12 && v.airborne > 1.5) this.driverKilled = true;
+      v.damage(dt * 4 * severity * inner);
       v.windshieldCracks = Math.min(1, v.windshieldCracks + dt * 0.3 * inner * this.career.effects.glassDamage);
       this.shakeImpulse = Math.max(this.shakeImpulse, 0.4 + inner * 0.6);
       if (Math.random() < dt * 1.4 * severity * inner) {
@@ -630,16 +643,22 @@ export class Game {
   private checkEndConditions(dt: number): void {
     if (this.state !== 'playing') return;
     if (this.endTimer < 0) {
-      if (this.vehicle.destroyed) {
-        this.endTimer = 4;
-        this.endReason = 'Vehicle destroyed';
-        this.audio.vehicleDestroyed();
-      } else if (this.onFoot && this.walker.dead) {
+      // Only the chaser's death ends the day; a wrecked truck limps on.
+      if (this.onFoot && this.walker.dead) {
         this.endTimer = 4;
         this.endReason = 'Caught in the tornado';
-      } else if (this.weather.storms.length === 0 && this.dayTime > 60) {
-        this.endTimer = 6;
-        this.endReason = 'Storms dissipated';
+      } else if (!this.onFoot && this.driverKilled) {
+        this.endTimer = 4;
+        this.endReason = 'Truck lofted by the tornado';
+        this.audio.vehicleDestroyed();
+      }
+      if (this.vehicle.destroyed && !this.wreckToasted) {
+        this.wreckToasted = true;
+        this.ui.toast('The truck is wrecked. It still runs, on reduced power.', 'alert', 7000);
+      }
+      if (this.weather.storms.length === 0 && this.dayTime > 60 && !this.calmToasted) {
+        this.calmToasted = true;
+        this.ui.toast('The storms have dissipated. Press Esc and end the chase to sell your footage and probe data.', 'info', 10000);
       }
     } else {
       this.endTimer -= dt;
@@ -657,7 +676,7 @@ export class Game {
     a.listenerUp.set(0, 1, 0).applyQuaternion(cam.quaternion);
     a.inVehicle = !this.onFoot;
     a.windowDamage = clamp(this.vehicle.windshieldCracks * 0.5 + (100 - this.vehicle.health) / 200, 0, 1);
-    a.engineRunning = this.vehicle.engineOn && !this.vehicle.destroyed;
+    a.engineRunning = this.vehicle.engineOn;
     a.engineRpm = this.vehicle.rpm;
     a.engineLoad = this.vehicle.throttle;
     a.vehicleSpeed = this.vehicle.speed;
@@ -710,14 +729,13 @@ export class Game {
     const warning = t && this.dayTime - this.warnedTornado < 900 && t.distanceTo(focus) < 40000 ? 'TORNADO WARNING IN EFFECT' : '';
 
     let prompt = '';
-    if (!this.onFoot && v.speed < 1 && !v.destroyed) prompt = 'F  GET OUT';
+    if (!this.onFoot && v.speed < 1) prompt = 'F  GET OUT';
     if (this.onFoot) {
       const d = this.doorWorld(new THREE.Vector3());
       if (Math.hypot(d.x - this.walker.pos.x, d.z - this.walker.pos.z) < 3.5) prompt = 'F  GET IN';
       if (!this.body.busy) prompt = this.probes.prompt(this.walker.pos) || prompt;
     }
     let center = '';
-    if (v.destroyed && !this.onFoot) center = 'Vehicle disabled';
     if (this.onFoot && this.walker.dead) center = 'Caught in the tornado';
 
     const camLabel = this.rig.mode === 'driver' ? 'DRIVER CAM' : this.rig.mode === 'dashcam' ? 'DASHCAM' : this.rig.zoom > 1.05 ? `BODYCAM  ${this.rig.zoom.toFixed(1)}×` : 'BODYCAM';
