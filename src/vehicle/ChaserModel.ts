@@ -157,10 +157,10 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   glassMat.envMapIntensity = 1.2;
   for (const [n, m] of mats) {
     // The cabin sits under a roof: keep sky reflections faint inside. With no
-    // bounce light, the true-to-life dark trim reads as black, so lift it.
+    // bounce light, the true-to-life dark trim reads as black under storm light, so lift it a little.
     if (/Dash|Fabric|Headliner|Interior|Seat|Carpet|Plastic|Door|^Wheel$|Gear|Knob/i.test(n)) {
       m.envMapIntensity = 0.12;
-      m.color.multiplyScalar(2.5);
+      m.color.multiplyScalar(1.6);
     }
   }
   const headlightMat = mat('Headlight');
@@ -283,6 +283,11 @@ export async function loadChaserModel(): Promise<VehicleParts> {
       len: len * 0.97,
       maxAngle: wp.x < 0 ? 1.9 : 1.75,
     };
+    const blade = find(n + '_Blade');
+    if (blade) {
+      rig.blade = blade;
+      rig.bladeBase = blade.quaternion.clone();
+    }
     // Make sure a positive sweep moves the blade up the glass; flip the axis if not.
     const tip = new THREE.Vector3(len, 0, 0);
     const probe = tip.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(rig.axis, 0.5));
@@ -348,6 +353,12 @@ export async function loadChaserModel(): Promise<VehicleParts> {
     }
   }
 
+  // Cargo area: liftgate (opens on negative rotation.x about its top hinge) and the probe tote.
+  const liftgate = find('Liftgate');
+  const rearEntry = find('RearEntry');
+  const probes = [1, 2, 3, 4].map((i) => find(`Probe_${i}`)).filter((o): o is THREE.Object3D => !!o);
+  const cargo = liftgate && rearEntry ? { liftgate, liftgateBase: liftgate.quaternion.clone(), rearEntry, probes } : undefined;
+
   const interior: THREE.Object3D[] = [];
   scene.traverse((o) => {
     if ((o as THREE.Mesh).isMesh && o !== windshield) interior.push(o);
@@ -375,5 +386,6 @@ export async function loadChaserModel(): Promise<VehicleParts> {
     ledMat,
     steeringBase: steeringWheel.quaternion.clone(),
     steeringAxis: new THREE.Vector3(0, 0, 1),
+    cargo,
   };
 }

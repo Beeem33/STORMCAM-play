@@ -51,7 +51,7 @@ export class WeatherSystem {
   /** Fired when a storm reaches the tornadic stage; return false if no tornado could be spawned. */
   onTornadogenesis: ((s: StormCell) => boolean) | null = null;
 
-  /** Build the day's storm setup. Storms fire 10–20 km to the west/south-west. */
+  /** Build the day's storm setup: one mature storm close upstream, the rest firing farther out. */
   startDay(sc: DayScenario, start: { x: number; z: number }): void {
     this.rng = mulberry32(sc.seed);
     const r = this.rng;
@@ -65,12 +65,24 @@ export class WeatherSystem {
     const tornadicIdx = Math.floor(r() * count);
     // Storms fire upstream (south-west) and their tracks cross the 4 × 4-mile chase area.
     const fx = Math.sin(flowAng), fz = -Math.cos(flowAng);
+    let side = r() < 0.5 ? -1 : 1;
     for (let i = 0; i < count; i++) {
-      const upstream = 5000 + r() * 2000 + i * 1200;
-      const lateral = (i - (count - 1) / 2) * 3600 + (r() - 0.5) * 1500;
+      const lead = i === tornadicIdx;
+      // The day's main storm is already mature ~3 km upstream, on a track that
+      // crosses the start area, and puts down its tornado about 10 s in; the
+      // others fire farther out on either side.
+      let upstream: number, lateral: number;
+      if (lead) {
+        upstream = 2800 + r() * 800;
+        lateral = (r() - 0.5) * 1600;
+      } else {
+        upstream = 5000 + r() * 2000;
+        lateral = side * (3600 + r() * 1200);
+        side = -side;
+      }
       const x = start.x - fx * upstream + -fz * lateral;
       const z = start.z - fz * upstream + fx * lateral;
-      const tornadic = i === tornadicIdx || r() < 0.18;
+      const tornadic = lead || r() < 0.18;
       const s: StormCell = {
         id: i + 1,
         label: LABELS[i],
@@ -78,11 +90,11 @@ export class WeatherSystem {
         vx: Math.sin(flowAng) * speed * (0.9 + r() * 0.2),
         vz: -Math.cos(flowAng) * speed * (0.9 + r() * 0.2),
         radius: 5200 + r() * 1800,
-        intensity: 0.35 + r() * 0.2,
-        meso: 0.1,
-        stage: 'developing',
+        intensity: lead ? 0.9 : 0.35 + r() * 0.2,
+        meso: lead ? 0.85 : 0.1,
+        stage: lead ? 'mature' : 'developing',
         age: 0,
-        stageTimer: (i === tornadicIdx ? 90 : 160) + r() * 120,
+        stageTimer: lead ? 10 : 160 + r() * 120,
         tornadic,
         hasTornado: false,
         seed: r(),

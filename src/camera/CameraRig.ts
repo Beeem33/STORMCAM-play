@@ -43,7 +43,14 @@ export interface RigContext {
   vehicleObj: THREE.Object3D;
   vehicle: Vehicle;
   /** Walker eye position + body yaw when on foot. */
-  walker: { eye: THREE.Vector3; bob: number; moving: number; animated: boolean } | null;
+  walker: {
+    eye: THREE.Vector3;
+    bob: number;
+    moving: number;
+    animated: boolean;
+    /** Chest-mount lean/twist/roll from the body animation (rad, YXZ), when animated. */
+    sway: THREE.Euler | null;
+  } | null;
   mouseDX: number;
   mouseDY: number;
   wheel: number;
@@ -171,10 +178,17 @@ export class CameraRig {
         cam.position.x += Math.sin(w.bob * 0.5) * (0.02 + run * 0.02) * w.moving * Math.cos(this.lookYaw);
         cam.position.z -= Math.sin(w.bob * 0.5) * (0.02 + run * 0.02) * w.moving * Math.sin(this.lookYaw);
       }
+      // Gait: with the animated body, the chest mount's own lean and roll from
+      // each stride (in step with the feet); otherwise a synthetic sway and a
+      // footfall jolt.
+      const sway = w.animated ? w.sway : null;
+      const gaitPitch = sway ? sway.x * 0.7 : -impact * 0.6;
+      const gaitYaw = sway ? sway.y * 0.5 : Math.sin(w.bob * 0.5) * 0.012 * w.moving;
+      const gaitRoll = sway ? sway.z * 0.7 : Math.sin(w.bob * 0.5) * (0.012 + run * 0.015) * w.moving;
       _e.set(
-        this.lookPitch + this.handShake[0].at(t) * handAmp + this.windShake[0].at(t) * windAmp - impact * 0.6 + this.roadShake[1].at(t) * turnAmp,
-        this.lookYaw + this.handShake[1].at(t) * handAmp + this.windShake[1].at(t) * windAmp + Math.sin(w.bob * 0.5) * 0.012 * w.moving + this.roadShake[0].at(t) * turnAmp,
-        this.handShake[2].at(t) * handAmp * 1.2 + Math.sin(w.bob * 0.5) * (0.012 + run * 0.015) * w.moving - this.lookVel.x * 0.01,
+        this.lookPitch + this.handShake[0].at(t) * handAmp + this.windShake[0].at(t) * windAmp + gaitPitch + this.roadShake[1].at(t) * turnAmp,
+        this.lookYaw + this.handShake[1].at(t) * handAmp + this.windShake[1].at(t) * windAmp + gaitYaw + this.roadShake[0].at(t) * turnAmp,
+        this.handShake[2].at(t) * handAmp * 1.2 + gaitRoll - this.lookVel.x * 0.01,
       );
       cam.quaternion.setFromEuler(_e);
       cam.fov = c.bodycamFov / this.zoom;

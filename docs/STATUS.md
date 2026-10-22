@@ -24,8 +24,21 @@ What exists in the code today, and what doesn't. Updated with each milestone.
     center-pivot sprinklers.
   - Billboards, hay stacks, abandoned trucks, stock tanks, round bales.
   - Telephone poles with sagging wires, barbed-wire fences, road signs.
+- **Sensor probes:** four orange "turtle" probes ride in a tote in the cargo
+  area. On foot, E at the back of the truck opens the liftgate and takes a
+  probe; the chaser carries it in both hands (no sprinting) and E sets it
+  down with a crouch animation. E next to a placed probe picks it back up.
+  Each probe logs the tornado's closest approach and peak wind; when the
+  core passes over one, it's torn off the ground and thrown with the debris
+  (an intercept). The day report sells the data: up to about $4,000 for a
+  near miss within 500 m of the vortex edge, more for an intercept and for
+  stronger tornadoes. Each lost probe costs $250 to replace.
+- **Day pacing:** the day's main storm starts mature about 3 km upstream on a
+  track that crosses the start area, and drops its tornado about 10 s in.
+  Tornadoes form over 30 s and stay mature for 7–12 minutes.
 - **Vehicle:** raycast suspension on the terrain function, slip-based tyre
-  grip that varies by surface and wetness, a 4-speed automatic with reverse,
+  grip that varies by surface and wetness, a 4-speed automatic with reverse
+  (tuned 6.2 L: 0–60 mph in about 7.5 s on asphalt, about 70 mph on grass),
   handbrake slides, aerodynamic drag, crosswind and tornado wind forces,
   rollovers, collisions with buildings, trees and poles, and damage.
 - **Chase SUV model:** a lifted, matte-black full-size SUV with brush guard,
@@ -36,17 +49,23 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   "STORMCAM" side graphics are projected onto the paint, and a soft contact
   shadow keeps it on the ground.
 - **Interior:** modelled dash, gauges, steering wheel that turns, A-pillars,
-  mirror, seats, door cards, the hood seen through the glass, wipers.
+  mirror, seats, door cards, the hood seen through the glass. Wipers have a
+  stamped arm and a beam blade that trails the arm and flips at each
+  reversal; low is about 45 wipes a minute, high about 65.
+- **Liftgate:** opens on its top hinge to reach the probe tote.
 - **Cameras:**
   - Driver: head inertia, road vibration, free look.
   - Dashcam: wide lens with barrel distortion, heavier noise, GPS/time OSD.
   - Bodycam on foot: 90° fisheye lens. The torso follows the mouse through
-    a spring, so looks overshoot and sway. Footfall jolts, wind buffeting,
-    timestamp OSD. The lens rides the chest of a rigged, animated body
+    a spring, so looks overshoot and sway. Wind buffeting, timestamp OSD.
+    The lens rides the chest of a rigged, animated body
     (`public/models/chaser_person.glb`, built in Blender by
-    `models/chaser_person_build.py` outside this repo), so the walk and run
-    cycles move the shot. Looking down shows the jacket, legs, boots and
-    hands; the head is hidden.
+    `models/chaser_person_build.py` outside this repo): the camera takes the
+    chest mount's real lean and roll from each stride, so walking and
+    running move the shot in step with the feet. Arm swing is kept low so
+    the hands stay out of frame unless you look down or carry a probe.
+    Looking down shows the jacket, legs, boots and hands; the head is
+    hidden.
   - All shake is scaled by a setting.
 - **Camera sensor post-processing:** auto exposure that lags (lightning blows
   out), filmic tone curve, sharpening, sensor noise that grows in the

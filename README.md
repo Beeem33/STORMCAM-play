@@ -37,7 +37,7 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | Q | Start / stop recording |
 | C | Switch camera: driver ↔ dashcam |
 | F | Get out of / back into the vehicle |
-| E | Interact (currently: same as F at the door) |
+| E | At the liftgate: open it, take or return a probe. On foot: set a probe down or pick one up |
 | R | Weather radar (1–4 picks a target cell) |
 | M | GPS map with route to the target |
 | X | Wipers: auto / off / low / high |

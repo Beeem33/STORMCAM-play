@@ -87,6 +87,9 @@ export interface WiperRig {
   /** Blade reach from the pivot (m) and full sweep angle (rad). */
   len: number;
   maxAngle: number;
+  /** Blade on the arm tip (Blender model), flexed about the same axis as it trails the arm. */
+  blade?: THREE.Object3D;
+  bladeBase?: THREE.Quaternion;
 }
 
 /** The windshield as a trapezoid in its own plane, for droplets and wipers. */
@@ -125,6 +128,8 @@ export interface VehicleParts {
   /** Steering wheel rest orientation and column axis (local). */
   steeringBase?: THREE.Quaternion;
   steeringAxis?: THREE.Vector3;
+  /** Liftgate, the sensor probes in the cargo area, and where to stand to reach them (Blender model). */
+  cargo?: { liftgate: THREE.Object3D; liftgateBase: THREE.Quaternion; rearEntry: THREE.Object3D; probes: THREE.Object3D[] };
 }
 
 export function buildVehicleModel(): VehicleParts {

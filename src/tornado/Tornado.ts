@@ -78,7 +78,8 @@ export class Tornado {
       maxWind: params.maxWind ?? EF_WIND[rating],
       debrisDensity: params.debrisDensity ?? 0.55 + rating * 0.09,
       visibility: params.visibility ?? 0.86 + r() * 0.14,
-      matureTime: params.matureTime ?? 220 + rating * 50 + r() * 120,
+      // Long enough to drive in and lay a line of probes across its path.
+      matureTime: params.matureTime ?? 420 + rating * 60 + r() * 120,
     };
     this.radius = core * 0.4;
     this.id = Tornado.nextId++;
@@ -126,7 +127,7 @@ export class Tornado {
     // Phase machine.
     switch (this.phase) {
       case 'forming': {
-        const T = 55;
+        const T = 30;
         const k = this.phaseTime / T;
         this.debris = smoothstep(0.0, 0.5, k);
         this.condensation = smoothstep(0.15, 1.0, k) * P.visibility;

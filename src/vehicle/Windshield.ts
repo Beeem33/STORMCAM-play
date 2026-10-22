@@ -44,6 +44,8 @@ export class Windshield {
   private wiperDir = 0; // 1 up, -1 down, 0 parked
   private wiperPause = 0;
   private prevAngle = 0;
+  private bladeFlex = 0;
+  private bladeVel = 0;
   onStroke: (() => void) | null = null;
   /** Current effective wiper speed label for the HUD. */
   activeMode: 'off' | 'int' | 'low' | 'high' = 'off';
@@ -148,10 +150,11 @@ export class Windshield {
     const wet = rain + hail * 0.5;
     let mode = this.mode;
     if (mode === 'auto') mode = wet < 0.02 ? 'off' : wet < 0.6 ? 'low' : 'high';
+    // Strokes per second of travel: low ≈ 45 wipes/min, high ≈ 65 wipes/min.
     if (mode === 'low') {
-      speed = 3.1;
+      speed = 1.5;
       pause = wet < 0.22 && this.mode === 'auto' ? 2.5 : 0;
-    } else if (mode === 'high') speed = 4.6;
+    } else if (mode === 'high') speed = 2.2;
     this.activeMode = mode === 'off' ? 'off' : pause > 0 ? 'int' : mode;
     this.prevAngle = this.wiperAngle;
     if (this.wiperDir === 0) {
@@ -174,8 +177,13 @@ export class Windshield {
     }
     // Ease the blade motion at the ends of travel.
     const ease = (a: number) => 0.5 - 0.5 * Math.cos(a * Math.PI);
+    // The rubber blade trails the arm a few degrees and flips over at each reversal.
+    const armVel = dt > 0 ? (ease(this.wiperAngle) - ease(this.prevAngle)) / dt : 0;
+    this.bladeVel += (-armVel * 0.022 - this.bladeFlex) * 260 * dt - this.bladeVel * 22 * dt;
+    this.bladeFlex = THREE.MathUtils.clamp(this.bladeFlex + this.bladeVel * dt, -0.08, 0.08);
     for (const w of this.frame.wipers) {
       w.obj.quaternion.copy(w.base).multiply(this._q.setFromAxisAngle(w.axis, ease(this.wiperAngle) * w.maxAngle));
+      if (w.blade && w.bladeBase) w.blade.quaternion.copy(w.bladeBase).multiply(this._q.setFromAxisAngle(w.axis, this.bladeFlex));
     }
 
     // --- Spawn drops (more when driving into the rain).

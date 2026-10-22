@@ -11,6 +11,7 @@ import { Windshield } from '../vehicle/Windshield';
 import { CameraRig, LENSES } from '../camera/CameraRig';
 import { Walker } from '../player/Walker';
 import { PlayerBody } from '../player/PlayerBody';
+import { ProbeSystem } from '../gameplay/Probes';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -31,6 +32,8 @@ export type GameState = 'menu' | 'playing' | 'paused' | 'report';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _qSway = new THREE.Quaternion();
+const _eSway = new THREE.Euler();
 /** Chase days start at 4:12 PM local time. */
 const DAY_START_SECONDS = 16 * 3600 + 12 * 60;
 /** Lat/lon of the world origin (central Kansas) for the dashcam GPS readout. */
@@ -51,6 +54,7 @@ export class Game {
   readonly lighting: Lighting;
   readonly terrain = new Terrain();
   readonly world: WorldProps;
+  readonly probes: ProbeSystem;
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
@@ -106,6 +110,9 @@ export class Game {
     this.body.load().catch((e) => console.warn('[body] chaser body unavailable', e));
     this.windshield = new Windshield(this.parts);
     this.vehicle.colliders = this.world.query;
+    this.probes = new ProbeSystem(this.parts, this.tornadoes);
+    this.scene.add(this.probes.group);
+    this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
     this.walker.colliders = this.world.query;
 
     this.audioState = {
@@ -209,6 +216,7 @@ export class Game {
     this.tornadoes.clear();
     this.windshield.clear();
     this.recorder.reset();
+    this.probes.reset();
     this.radar.reset();
     this.dayTime = 0;
     this.distanceDriven = 0;
@@ -229,7 +237,7 @@ export class Game {
     this.state = 'playing';
     this.ui.showHud();
     this.input.requestLock();
-    this.ui.toast(`Day ${this.career.data.day}. Storms are firing west of town. Check radar (R).`, 'info', 7000);
+    this.ui.toast(`Day ${this.career.data.day}. A supercell west of town is about to drop a tornado. Get the probes out of the back (E at the liftgate) and set them in its path.`, 'info', 9000);
   }
 
   pause(): void {
@@ -263,16 +271,17 @@ export class Game {
     const footage = Math.round(this.recorder.clips.reduce((a, cl) => a + cl.value, 0));
     const repairs = Math.round((100 - this.vehicle.health) * 55 + (this.vehicle.destroyed ? 4500 : 0) + this.vehicle.windshieldCracks * 900);
     const fuel = Math.round(95 + (this.distanceDriven / 1609) * 0.32);
-    const net = footage - repairs - fuel;
+    const probes = this.probes.report();
+    const net = footage + probes.value - probes.lost - repairs - fuel;
     c.money += net;
-    c.totalEarned += footage;
+    c.totalEarned += footage + probes.value;
     c.bestClip = Math.max(c.bestClip, ...this.recorder.clips.map((cl) => cl.value), 0);
     if (this.recorder.clips.some((cl) => cl.tornadoSeconds > 3)) c.tornadoesFilmed++;
     const day = c.day;
     c.day++;
     this.career.save();
     this.ui.closePanel(false);
-    this.ui.showReport({ clips: [...this.recorder.clips], footage, repairs, fuel, net, balance: c.money, day, outcome });
+    this.ui.showReport({ clips: [...this.recorder.clips], footage, probes, repairs, fuel, net, balance: c.money, day, outcome });
   }
 
   private selectTarget(id: number): void {
@@ -355,6 +364,7 @@ export class Game {
     this.weather.update(playing ? sdt : 0, focus);
     const baseAlt = this.lighting.sky.baseAlt;
     this.tornadoes.update(playing ? sdt : 0, baseAlt);
+    this.probes.update(playing ? sdt : 0);
     const L = this.weather.local;
     const t = this.tornadoes.tornado;
 
@@ -381,17 +391,19 @@ export class Game {
 
     // --- On foot.
     if (this.onFoot && playing) {
-      const fwd = (inp.isDown('KeyW') ? 1 : 0) - (inp.isDown('KeyS') ? 1 : 0);
-      const right = (inp.isDown('KeyD') ? 1 : 0) - (inp.isDown('KeyA') ? 1 : 0);
+      // Setting a probe down roots the feet until it's on the ground.
+      const rooted = this.body.busy;
+      const fwd = rooted ? 0 : (inp.isDown('KeyW') ? 1 : 0) - (inp.isDown('KeyS') ? 1 : 0);
+      const right = rooted ? 0 : (inp.isDown('KeyD') ? 1 : 0) - (inp.isDown('KeyA') ? 1 : 0);
       this.tornadoes.windAt(_v.copy(this.walker.pos).setY(this.walker.pos.y + 1), _w).add(L.wind);
       const yawCar = this.vehicle.heading;
       this.walker.car = { x: this.vehicle.pos.x, z: this.vehicle.pos.z, rot: -yawCar, hx: 1.0, hz: 2.55 };
-      this.walker.update(sdt, { fwd, right, run: inp.isDown('ShiftLeft') || inp.isDown('ShiftRight') }, this.rig.yaw, _w);
+      this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w);
       this.keepInChaseArea(this.walker.pos, this.walker.vel);
     }
     // The chaser's body: animated from his speed and the wind; the bodycam rides its chest mount.
     const speedOnFoot = Math.hypot(this.walker.vel.x, this.walker.vel.z);
-    this.body.update(sdt, this.onFoot && !this.walker.dead, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain);
+    this.body.update(sdt, this.onFoot && !this.walker.dead, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain, this.probes.carrying);
     if (this.onFoot && this.body.chestCamPosition(_v)) {
       // Sit the lens just proud of the jacket; looking down, the wearer leans
       // forward over his feet so the jacket, legs and boots come into frame.
@@ -411,7 +423,12 @@ export class Game {
     const shake = this.settings.data.cameraShake * (this.onFoot ? eff.handheldShake : 1);
     this.rig.update({
       dt, time: this.time, vehicleObj: this.vehicleObj, vehicle: this.vehicle,
-      walker: this.onFoot ? { eye: this.walker.eye, bob: this.walker.bob, moving: this.walker.moving, animated: this.body.loaded } : null,
+      walker: this.onFoot
+        ? {
+            eye: this.walker.eye, bob: this.walker.bob, moving: this.walker.moving, animated: this.body.loaded,
+            sway: this.body.chestSway(_qSway) ? _eSway.setFromQuaternion(_qSway, 'YXZ') : null,
+          }
+        : null,
       mouseDX: playing ? inp.mouseDX : 0, mouseDY: playing ? inp.mouseDY : 0, wheel: playing ? inp.wheel : 0,
       zoomHeld: inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
       shake: this.onFoot && eff.tripod && this.walker.stillTime > 1.5 ? shake * 0.1 : shake,
@@ -568,7 +585,10 @@ export class Game {
         if (inp.wasPressed(code) && s) this.selectTarget(s.id);
       });
     }
-    if (inp.wasPressed('KeyF') || inp.wasPressed('KeyE')) this.toggleOnFoot(inp.wasPressed('KeyF'));
+    // E works the liftgate and probes on foot; otherwise E/F are the door.
+    const usedE = inp.wasPressed('KeyE') && this.onFoot && !this.walker.dead && !this.body.busy &&
+      this.probes.interact(this.walker.pos, this.rig.torsoYaw, this.body.carryPoint, (touchdown) => this.body.playPlace(touchdown));
+    if (!usedE && (inp.wasPressed('KeyF') || inp.wasPressed('KeyE'))) this.toggleOnFoot(inp.wasPressed('KeyF'));
   }
 
   private doorWorld(out: THREE.Vector3): THREE.Vector3 {
@@ -597,6 +617,8 @@ export class Game {
         if (isF) this.ui.toast('Walk back to the driver door to get in.');
         return;
       }
+      this.probes.stowOnEntry();
+      this.probes.closeGate();
       this.onFoot = false;
       this.rig.setMode('driver');
       this.rig.yaw = 0;
@@ -680,6 +702,11 @@ export class Game {
     } else objective.push('NO TARGET  ·  R FOR RADAR');
     if (this.career.effects.windReadout) objective.push(`WIND ${imperial ? Math.round(this.windAtCam.length() * MPS_TO_MPH) + ' MPH' : Math.round(this.windAtCam.length()) + ' M/S'}`);
     if (v.health < 95) objective.push(`VEHICLE ${Math.round(v.health)}%`);
+    if (this.probes.available) {
+      const set = this.probes.deployed.filter((d) => !d.lofted).length;
+      const lofted = this.probes.deployed.length - set;
+      objective.push(`PROBES  ${set} SET${lofted ? ` · ${lofted} INTERCEPTED` : ''} · ${this.probes.inTruck} IN TRUCK${this.probes.carrying ? ' · CARRYING' : ''}`);
+    }
     const warning = t && this.dayTime - this.warnedTornado < 900 && t.distanceTo(focus) < 40000 ? 'TORNADO WARNING IN EFFECT' : '';
 
     let prompt = '';
@@ -687,6 +714,7 @@ export class Game {
     if (this.onFoot) {
       const d = this.doorWorld(new THREE.Vector3());
       if (Math.hypot(d.x - this.walker.pos.x, d.z - this.walker.pos.z) < 3.5) prompt = 'F  GET IN';
+      if (!this.body.busy) prompt = this.probes.prompt(this.walker.pos) || prompt;
     }
     let center = '';
     if (v.destroyed && !this.onFoot) center = 'Vehicle disabled';

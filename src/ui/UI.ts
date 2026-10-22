@@ -43,6 +43,8 @@ export interface UIActions {
 export interface ReportData {
   clips: Clip[];
   footage: number;
+  /** Probe data sold, and what lost probes cost to replace. */
+  probes: { lines: string[]; value: number; lost: number };
   repairs: number;
   fuel: number;
   net: number;
@@ -253,7 +255,7 @@ export class UI {
   showControls(back?: () => void): void {
     const keys: [string, string][] = [
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
-      ['Q', 'Start / stop recording'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Interact (start engine, read signs)'],
+      ['Q', 'Start / stop recording'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / pick up probes'],
       ['R', 'Weather radar'], ['M', 'GPS map'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
       ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Wheel / RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
     ];
@@ -307,6 +309,9 @@ export class UI {
     const p = this.openPanel(el(`<div class="panel report" style="width:min(720px, calc(100vw - 32px))"><h2>Day ${r.day} · ${r.outcome}</h2>
       <table><tr><th>Clip</th><th>Length</th><th>Grade</th><th>Highlights</th><th class="num">Sale</th></tr>${rows}</table>
       <div class="total"><span>Footage sold</span><span class="pos">${money(r.footage)}</span></div>
+      ${r.probes.lines.map((l) => `<div class="ev" style="padding:2px 0">${l}</div>`).join('')}
+      <div class="total"><span>Probe data sold</span><span class="pos">${money(r.probes.value)}</span></div>
+      ${r.probes.lost ? `<div class="total"><span>Replacement probes</span><span class="neg">${money(-r.probes.lost)}</span></div>` : ''}
       <div class="total"><span>Repairs</span><span class="neg">${money(-r.repairs)}</span></div>
       <div class="total"><span>Fuel &amp; motel</span><span class="neg">${money(-r.fuel)}</span></div>
       <div class="total"><span>Net</span><span class="${r.net >= 0 ? 'pos' : 'neg'}">${money(r.net)}</span></div>

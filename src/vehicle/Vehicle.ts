@@ -36,9 +36,10 @@ const MU: Record<SurfaceKind, [number, number]> = {
   grass: [0.55, 0.38],
   mud: [0.42, 0.3],
 };
-const ROLL_RES: Record<SurfaceKind, number> = { asphalt: 0.012, gravel: 0.03, grass: 0.07, mud: 0.12 };
+/** Rolling-resistance coefficient (fraction of wheel load). Chase trucks run aired-down M/T tyres. */
+const ROLL_RES: Record<SurfaceKind, number> = { asphalt: 0.013, gravel: 0.022, grass: 0.045, mud: 0.07 };
 /** Surface roughness → suspension excitation amplitude (m). */
-const ROUGH: Record<SurfaceKind, number> = { asphalt: 0.002, gravel: 0.012, grass: 0.03, mud: 0.035 };
+const ROUGH: Record<SurfaceKind, number> = { asphalt: 0.002, gravel: 0.01, grass: 0.014, mud: 0.018 };
 
 const GEARS = [3.06, 1.63, 1.0, 0.7];
 const REVERSE = 2.29;
@@ -47,8 +48,8 @@ const IDLE = 750;
 const REDLINE = 5600;
 
 function torqueAt(rpm: number): number {
-  // 5.3 L V8-ish curve, N·m.
-  const pts: [number, number][] = [[600, 250], [1000, 330], [2000, 410], [3000, 445], [4000, 455], [5000, 410], [5600, 360], [6200, 200]];
+  // Tuned 6.2 L V8 (a built chase truck), N·m.
+  const pts: [number, number][] = [[600, 325], [1000, 430], [2000, 535], [3000, 580], [4000, 590], [5000, 535], [5600, 470], [6200, 260]];
   if (rpm <= pts[0][0]) return pts[0][1];
   for (let i = 1; i < pts.length; i++) {
     if (rpm <= pts[i][0]) {
@@ -244,11 +245,13 @@ export class Vehicle {
     this.shiftTimer = Math.max(0, this.shiftTimer - dt);
     if (this.gear > 0 && this.shiftTimer <= 0) {
       const up = 4100 + this.throttle * 1100;
-      const down = 1300 + this.throttle * 1400;
+      const down = 1200 + this.throttle * 1000;
+      // Never drop into a gear that would immediately want to shift up again (gear hunting cuts drive).
+      const lowerRpm = this.gear > 1 ? coupled * (GEARS[this.gear - 2] / GEARS[this.gear - 1]) : Infinity;
       if (this.rpm > up && this.gear < GEARS.length) {
         this.gear++;
-        this.shiftTimer = 0.45;
-      } else if (this.rpm < down && this.gear > 1 && coupled < down) {
+        this.shiftTimer = 0.3;
+      } else if (this.rpm < down && this.gear > 1 && coupled < down && lowerRpm < up - 500) {
         this.gear--;
         this.shiftTimer = 0.35;
       }
@@ -347,7 +350,8 @@ export class Vehicle {
       }
       // Parking hold.
       if (w.rear && this.throttle < 0.02 && braking < 0.02 && Math.abs(vLong) < 0.4) Fx -= vLong * 6000;
-      Fx -= vLong * ROLL_RES[surf] * Fz * 0.6 + Math.sign(vLong) * ROLL_RES[surf] * Fz * 0.4 * Math.min(1, Math.abs(vLong));
+      // Rolling resistance: about constant with speed (Crr·Fz), rising gently at speed.
+      Fx -= Math.sign(vLong) * ROLL_RES[surf] * Fz * (Math.min(1, Math.abs(vLong)) + Math.abs(vLong) * 0.004);
 
       // Lateral (simplified Pacejka).
       const alpha = Math.atan2(vLat, Math.max(Math.abs(vLong), 1.5));
