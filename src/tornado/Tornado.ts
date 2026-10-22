@@ -56,6 +56,10 @@ export class Tornado {
   debris = 0;
   /** 0..1 thin and sinuous. */
   rope = 0;
+  /** How far down the funnel condenses once mature: to the ground unless it's rain-wrapped. */
+  get groundCond(): number {
+    return this.params.visibility >= 0.5 ? 1 : this.params.visibility;
+  }
   /** Current funnel radius at ground. */
   radius: number;
   private readonly offset = new THREE.Vector2(); // storm-relative (ahead, right)
@@ -130,7 +134,7 @@ export class Tornado {
         const T = 30;
         const k = this.phaseTime / T;
         this.debris = smoothstep(0.0, 0.5, k);
-        this.condensation = smoothstep(0.15, 1.0, k) * P.visibility;
+        this.condensation = smoothstep(0.15, 1.0, k) * this.groundCond;
         this.presence = smoothstep(0, 0.6, k);
         this.radius = P.coreRadius * (0.35 + 0.65 * smoothstep(0.3, 1, k));
         this.rope = 0;
@@ -144,7 +148,7 @@ export class Tornado {
         // Breathe: the funnel widens and narrows over minutes.
         const breathe = 1 + 0.18 * Math.sin(this.age * 0.05 + 1.3) + 0.08 * Math.sin(this.age * 0.17);
         this.radius = damp(this.radius, P.coreRadius * breathe, 0.2, dt);
-        this.condensation = damp(this.condensation, P.visibility * (0.85 + 0.15 * Math.sin(this.age * 0.09)), 0.3, dt);
+        this.condensation = damp(this.condensation, this.groundCond * (0.97 + 0.03 * Math.sin(this.age * 0.09)), 0.3, dt);
         if (k >= 1) this.setPhase('rope');
         break;
       }

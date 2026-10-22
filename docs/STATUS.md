@@ -38,6 +38,15 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   onto its wheels after 3 s; at 0% health it's wrecked but limps on at about
   a third of its power. When the storms die out, a message says to end the
   chase from the pause menu to get paid.
+- **HUD:** deliberately bare: REC and clip time, speed, one red arrow
+  pointing at the tornado (or the storm before it forms) with its distance,
+  and the probe count. The radar draws a bold arrow on each storm showing
+  where it will be in 20 minutes (red once it's tornadic).
+- **Tornado chaos:** the funnel condenses to the ground (unless
+  rain-wrapped) with a churning brown debris cloud at its base. Up to 4,000
+  debris fragments are ripped up and lofted; tree crowns are torn off and
+  thrown, the strongest winds uproot whole trees, and telephone poles snap
+  and fly (up to 160 large thrown objects at once).
 - **Day pacing:** the day's main storm starts mature about 3 km upstream on a
   track that crosses the start area, and drops its tornado about 10 s in.
   Tornadoes form over 30 s and stay mature for 7–12 minutes.

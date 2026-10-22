@@ -186,19 +186,30 @@ export class Radar {
         ctx.stroke();
       }
 
-      // Storm IDs and 30-minute track arrows.
+      // Storm IDs and bold arrows: where each storm will be in 20 minutes.
       ctx.font = '600 13px "IBM Plex Mono", monospace';
       for (const m of s.storms) {
         const [px, pz] = toPx(m.x, m.z);
-        const [ex, ez] = toPx(m.x + m.vx * 1800, m.z + m.vz * 1800);
-        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-        ctx.lineWidth = 1.3;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(px, pz);
-        ctx.lineTo(ex, ez);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        const [ex, ez] = toPx(m.x + m.vx * 1200, m.z + m.vz * 1200);
+        const ang = Math.atan2(ez - pz, ex - px);
+        const tor = m.stage === 'tornadic';
+        for (const [col, w] of [['#000', 7], [tor ? '#ff4a3d' : '#ffffff', 3.5]] as const) {
+          ctx.strokeStyle = col;
+          ctx.fillStyle = col;
+          ctx.lineWidth = w;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(px, pz);
+          ctx.lineTo(ex - Math.cos(ang) * 8, ez - Math.sin(ang) * 8);
+          ctx.stroke();
+          const hs = w > 5 ? 15 : 12;
+          ctx.beginPath();
+          ctx.moveTo(ex + Math.cos(ang) * (w > 5 ? 3 : 0), ez + Math.sin(ang) * (w > 5 ? 3 : 0));
+          ctx.lineTo(ex - Math.cos(ang - 0.45) * hs, ez - Math.sin(ang - 0.45) * hs);
+          ctx.lineTo(ex - Math.cos(ang + 0.45) * hs, ez - Math.sin(ang + 0.45) * hs);
+          ctx.closePath();
+          ctx.fill();
+        }
         const sel = m.id === this.targetId;
         ctx.fillStyle = sel ? '#ffd23a' : '#ffffff';
         ctx.strokeStyle = '#000';

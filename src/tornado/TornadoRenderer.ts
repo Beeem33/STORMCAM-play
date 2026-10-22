@@ -100,12 +100,15 @@ vec3 field(vec3 p, out vec3 radial, out float hOut) {
   float funnel = (1.0 - smoothstep(edge * 0.8, edge * 1.02, d)) * condMask;
   funnel *= 0.85 + 0.4 * n2.r;
 
-  // Debris skirt.
+  // Debris and dust cloud: a churning, ragged sheath hugging the base and
+  // climbing the funnel, thickest where the vortex scours the ground.
   float dh = q.y;
-  float spread = uDebrisR * (0.55 + 0.6 * smoothstep(0.0, uDebrisH, dh));
-  float skirt = (1.0 - smoothstep(spread * 0.35, spread, d + (n.b - 0.5) * spread * 0.6));
-  float vert = exp(-max(dh, 0.0) / uDebrisH) * smoothstep(-6.0, 4.0, dh);
-  float debris = uDebris * skirt * vert * (0.35 + 1.2 * n.g * n2.b);
+  float spread = uDebrisR * (0.5 + 0.7 * smoothstep(0.0, uDebrisH, dh));
+  float skirt = (1.0 - smoothstep(spread * 0.3, spread, d + (n.b - 0.5) * spread * 0.7));
+  float vert = exp(-max(dh, 0.0) / uDebrisH) * smoothstep(-6.0, 3.0, dh);
+  // A tighter sheath of lofted debris wrapped around the lower funnel.
+  float sheath = (1.0 - smoothstep(R * 0.9, R * 1.7 + 20.0, d)) * exp(-max(dh, 0.0) / (uDebrisH * 1.2)) * 0.6;
+  float debris = uDebris * max(skirt * vert, sheath) * (0.45 + 1.5 * n.g * n2.b);
 
   float distHint = min(d - edge * 1.1, d - spread);
   return vec3(funnel * uPresence, debris * uPresence, distHint);
@@ -151,11 +154,13 @@ void main() {
       // Match the cloud base: dim grey-teal, lit side a little brighter.
       vec3 sky = uSkyHorizon * vec3(0.84, 0.97, 1.0);
       float stria = texture(uNoise, vec3(atan(radial.z, radial.x) * 0.9 + uTime * uSpin * 0.15, h * 6.0, 0.3)).r;
-      vec3 cf = sky * (0.16 + 0.24 * lam) * mix(0.75, 1.05, h) * (0.8 + 0.4 * stria) + uSunColor * uSunAmt * pow(lam, 4.0) * 0.08;
-      vec3 cd = vec3(0.15, 0.125, 0.1) * (0.45 + 0.4 * lam) * (0.4 + 0.6 * dot(uSkyHorizon, vec3(0.33)));
+      // Darker than the cloud base so the funnel reads against the bright horizon.
+      vec3 cf = sky * (0.09 + 0.2 * lam) * mix(0.7, 1.05, h) * (0.8 + 0.4 * stria) + uSunColor * uSunAmt * pow(lam, 4.0) * 0.08;
+      // Dust: a lighter brown on the lit side, so the churning base stands out from the funnel.
+      vec3 cd = vec3(0.27, 0.22, 0.17) * (0.35 + 0.65 * lam) * (0.45 + 0.6 * dot(uSkyHorizon, vec3(0.33)));
       vec3 c = (cf * f.x + cd * f.y) / dens;
       c += vec3(0.75, 0.78, 0.95) * uFlash * 0.6;
-      float sigma = f.x * 0.09 + f.y * 0.05;
+      float sigma = f.x * 0.16 + f.y * 0.11;
       float a = 1.0 - exp(-sigma * stepLen);
       col += T * a * c;
       depthAcc += T * a * t;
@@ -236,14 +241,14 @@ export class TornadoRenderer {
     this.mesh.visible = true;
     const u = this.material.uniforms;
     const P = t.params;
-    const debrisR = Math.max(60, t.radius * 2.3 + 40) * (0.7 + P.debrisDensity * 0.6);
-    const debrisH = 35 + t.radius * 0.5 + P.rating * 12;
+    const debrisR = Math.max(70, t.radius * 1.7 + 50) * (0.8 + P.debrisDensity * 0.4);
+    const debrisH = 40 + t.radius * 0.35 + P.rating * 15;
     (u.uBase.value as THREE.Vector3).copy(t.position);
     (u.uTop.value as THREE.Vector3).copy(t.top);
     u.uRadius.value = t.radius;
     u.uTopR.value = P.topRadius * (1 - t.rope * 0.5);
     u.uCond.value = t.condensation;
-    u.uDebris.value = t.debris * P.debrisDensity;
+    u.uDebris.value = t.debris * Math.max(0.6, P.debrisDensity);
     u.uDebrisR.value = debrisR;
     u.uDebrisH.value = debrisH;
     u.uRope.value = t.rope;

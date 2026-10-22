@@ -22,6 +22,8 @@ export interface HudState {
   speedLabel: string;
   gear: string;
   objective: string[];
+  /** Arrow to the tornado/storm: angle relative to where the camera looks (rad, clockwise). */
+  pointer: { angle: number; label: string } | null;
   warning: string;
   camLabel: string;
   osd: string;
@@ -80,9 +82,8 @@ export class UI {
     this.root = root;
     this.hud = el(`
       <div class="hud hidden">
-        <div class="rec"><div class="line"><span class="dot"></span><span data-r="recLabel">STBY</span><span data-r="recTime">00:00</span></div>
-          <div class="line"><span class="q"><i data-r="q"></i></span><span data-r="clipVal"></span></div>
-          <div class="hint" data-r="hint"></div></div>
+        <div class="rec"><div class="line"><span class="dot"></span><span data-r="recLabel">STBY</span><span data-r="recTime">00:00</span></div></div>
+        <div class="pointer hidden" data-r="pointer"><div class="arrow" data-r="arrow"></div><div class="plabel" data-r="plabel"></div></div>
         <div class="obj" data-r="obj"></div>
         <div class="toasts"></div>
         <div class="speed"><b data-r="speed">0</b><span data-r="unit">MPH</span><span data-r="gear">D</span></div>
@@ -355,10 +356,12 @@ export class UI {
     const r = this.refs;
     this.hud.querySelector('.rec')!.classList.toggle('on', h.recording);
     r.recLabel.textContent = h.recording ? 'REC' : 'STBY';
-    r.recTime.textContent = fmtTime(h.clipTime);
-    (r.q as HTMLElement).style.width = Math.round(h.quality * 100) + '%';
-    r.clipVal.textContent = h.recording ? money(h.clipValue) : h.sessionValue > 0 ? 'TOTAL ' + money(h.sessionValue) : 'Q TO RECORD';
-    r.hint.textContent = h.hint;
+    r.recTime.textContent = h.recording ? fmtTime(h.clipTime) : 'Q TO RECORD';
+    r.pointer.classList.toggle('hidden', !h.pointer);
+    if (h.pointer) {
+      r.arrow.style.transform = `rotate(${h.pointer.angle}rad)`;
+      r.plabel.textContent = h.pointer.label;
+    }
     r.speed.textContent = h.speedLabel.split(' ')[0];
     r.unit.textContent = h.speedLabel.split(' ')[1] ?? '';
     r.gear.textContent = h.gear;

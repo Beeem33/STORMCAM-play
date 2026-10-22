@@ -11,7 +11,8 @@ import { patchMaterial } from '../rendering/Atmosphere';
  * coefficient per piece, so light pieces follow the flow and heavy ones lag.
  */
 
-const COUNT = 1600;
+const COUNT = 4000;
+const MAX_BODIES = 160;
 
 interface Body {
   obj: THREE.Object3D;
@@ -57,7 +58,8 @@ export class DebrisSystem {
     for (let i = 0; i < COUNT; i++) {
       const c = palette[i % palette.length];
       this.tint.set(c, i * 3);
-      this.size[i] = 0.25 + Math.random() ** 3 * 2.2;
+      // Mostly boards, shingles and clods, with plenty of sheets of roofing and siding.
+      this.size[i] = 0.35 + Math.random() ** 2.2 * 3.2;
       this.drag[i] = 1.6 / (0.4 + this.size[i]);
     }
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(COUNT * 3), 3);
@@ -68,6 +70,11 @@ export class DebrisSystem {
 
   /** Hand a mesh (already in world space) to the wind. */
   throwObject(obj: THREE.Object3D, vel: THREE.Vector3, mass = 1): void {
+    // Keep the number of big flying objects bounded: the oldest settle out of the scene.
+    if (this.bodies.length >= MAX_BODIES) {
+      const old = this.bodies.shift()!;
+      old.obj.removeFromParent();
+    }
     this.group.attach(obj);
     this.bodies.push({
       obj,
@@ -83,7 +90,7 @@ export class DebrisSystem {
     const t = tornado && tornado.alive ? tornado : null;
     // Spawn fragments at the base while the vortex has a debris cloud.
     if (t && t.debris > 0.05) {
-      this.spawnAcc += dt * 140 * t.debris * t.params.debrisDensity * (0.5 + t.params.rating * 0.25);
+      this.spawnAcc += dt * 480 * t.debris * Math.max(0.6, t.params.debrisDensity) * (0.5 + t.params.rating * 0.25);
       let i = 0;
       while (this.spawnAcc >= 1 && i < COUNT) {
         if (!this.alive[i]) {
@@ -95,7 +102,11 @@ export class DebrisSystem {
           this.pos[i * 3] = x;
           this.pos[i * 3 + 1] = heightAt(x, z) + 0.5;
           this.pos[i * 3 + 2] = z;
-          this.vel.fill(0, i * 3, i * 3 + 3);
+          // Ripped off the ground already moving with the flow, and kicked upward.
+          t.windAt(_s.set(x, this.pos[i * 3 + 1], z), _w);
+          this.vel[i * 3] = _w.x * 0.6;
+          this.vel[i * 3 + 1] = 6 + Math.random() * 18;
+          this.vel[i * 3 + 2] = _w.z * 0.6;
           for (let k = 0; k < 3; k++) {
             this.rot[i * 3 + k] = Math.random() * 6.28;
             this.spin[i * 3 + k] = (Math.random() - 0.5) * 12;

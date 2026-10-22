@@ -810,8 +810,13 @@ export class WorldProps {
       trees.forEach((tr, id) => {
         if (tr.stripped || Math.abs(tr.x - tp.x) > reach || Math.abs(tr.z - tp.z) > reach) return;
         _p.set(tr.x, heightAt(tr.x, tr.z) + 4, tr.z);
-        if (t.windAt(_p, _w).length() > 48) {
+        const w = t.windAt(_p, _w).length();
+        if (w > 48) {
+          // The crown is torn off and thrown; in the strongest winds the whole tree goes.
+          const uproot = w > 65;
+          this.fling(tr.pool, tr.idx, (k) => uproot || k > 0, _w.clone().multiplyScalar(0.35).setY(8 + Math.random() * 10), uproot ? 6 : 2);
           this.stripTree(tr);
+          if (uproot) tr.pool.meshes.forEach((_m2, k) => tr.pool.set(tr.idx, new THREE.Matrix4().makeScale(0, 0, 0), k));
           let set = this.destroyed.get(k);
           if (!set) this.destroyed.set(k, (set = new Set()));
           set.add(1000 + id);
@@ -844,6 +849,13 @@ export class WorldProps {
       const w = t.windAt(_p, _w);
       if (w.length() > 45) {
         this.brokenPoles.add(p.key);
+        if (w.length() > 55) {
+          // Snapped at the base and carried off.
+          this.fling(this.poles, p.idx, () => true, w.clone().multiplyScalar(0.3).setY(10 + Math.random() * 8), 4);
+          this.poles.set(p.idx, new THREE.Matrix4().makeScale(0, 0, 0));
+          wiresDirty = true;
+          continue;
+        }
         const yaw = Math.atan2(w.x, w.z);
         _q.setFromEuler(new THREE.Euler(1.3, yaw, 0, 'YXZ'));
         _m.compose(_p.set(p.x, heightAt(p.x, p.z), p.z), _q, _s.setScalar(1));
@@ -860,6 +872,20 @@ export class WorldProps {
         this.lastFenceCenter.set(1e9, 1e9); // rebuild next frame
       }
     }
+  }
+
+  /** Copy an instanced prop (some of its parts) into real meshes and hand them to the wind. */
+  private fling(pool: InstancePool, idx: number, keep: (part: number) => boolean, vel: THREE.Vector3, mass: number): void {
+    const g = new THREE.Group();
+    pool.asset.parts.forEach((part, k) => {
+      if (keep(k)) g.add(new THREE.Mesh(part.geometry, part.material));
+    });
+    if (!g.children.length) return;
+    pool.matrices[idx].decompose(g.position, g.quaternion, g.scale);
+    g.traverse((o) => (o.frustumCulled = false));
+    this.group.add(g);
+    g.updateMatrixWorld(true);
+    this.debris.throwObject(g, vel, mass);
   }
 
   private stripTree(tr: { pool: InstancePool; idx: number; stripped: boolean }): void {

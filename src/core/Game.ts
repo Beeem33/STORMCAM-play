@@ -710,23 +710,25 @@ export class Game {
     const v = this.vehicle;
     const speed = Math.abs(v.forwardSpeed);
     const focus = this.onFoot ? this.walker.pos : v.pos;
-    const objective: string[] = [`DAY ${this.career.data.day}  ·  ${this.clock(this.dayTime)}`];
-    const target = this.radar.target();
+    // Kept deliberately bare: one arrow to the tornado (or the storm before it
+    // forms), and the probe count. Everything else is in the radar and map.
     const dist = (m: number) => (imperial ? `${(m / 1609.34).toFixed(1)} MI` : `${(m / 1000).toFixed(1)} KM`);
-    if (target) {
-      const route = routeLength(gridRoute(focus.x, focus.z, target.x, target.z));
-      const sp = Math.hypot(target.vx, target.vz);
-      objective.push(`CELL ${target.label}  ${dist(Math.hypot(target.x - focus.x, target.z - focus.z))} ${compass(target.x - focus.x, target.z - focus.z)}  ·  ROUTE ${dist(route)}`);
-      objective.push(`MOVING ${compass(target.vx, target.vz)} ${imperial ? Math.round(sp * MPS_TO_MPH) + ' MPH' : Math.round(sp * 3.6) + ' KM/H'}`);
-    } else objective.push('NO TARGET  ·  R FOR RADAR');
-    if (this.career.effects.windReadout) objective.push(`WIND ${imperial ? Math.round(this.windAtCam.length() * MPS_TO_MPH) + ' MPH' : Math.round(this.windAtCam.length()) + ' M/S'}`);
-    if (v.health < 95) objective.push(`VEHICLE ${Math.round(v.health)}%`);
-    if (this.probes.available) {
-      const set = this.probes.deployed.filter((d) => !d.lofted).length;
-      const lofted = this.probes.deployed.length - set;
-      objective.push(`PROBES  ${set} SET${lofted ? ` · ${lofted} INTERCEPTED` : ''} · ${this.probes.inTruck} IN TRUCK${this.probes.carrying ? ' · CARRYING' : ''}`);
+    const objective: string[] = [];
+    let pointer: HudState['pointer'] = null;
+    const aim = t ?? this.radar.target() ?? this.weather.storms.find((s) => s.tornadic) ?? null;
+    if (aim) {
+      const ax = 'position' in aim ? aim.position.x : aim.x;
+      const az = 'position' in aim ? aim.position.z : aim.z;
+      this.rig.forward(_v);
+      const rel = Math.atan2(ax - focus.x, -(az - focus.z)) - Math.atan2(_v.x, -_v.z);
+      pointer = { angle: rel, label: `${t ? 'TORNADO' : 'STORM'}  ${dist(Math.hypot(ax - focus.x, az - focus.z))}` };
     }
-    const warning = t && this.dayTime - this.warnedTornado < 900 && t.distanceTo(focus) < 40000 ? 'TORNADO WARNING IN EFFECT' : '';
+    if (this.probes.available) {
+      const used = this.probes.deployed.length;
+      objective.push(`PROBES  ${used}/4 SET${this.probes.carrying ? '  ·  CARRYING' : ''}`);
+    }
+    if (v.destroyed) objective.push('TRUCK WRECKED');
+    const warning = '';
 
     let prompt = '';
     if (!this.onFoot && v.speed < 1) prompt = 'F  GET OUT';
@@ -766,6 +768,7 @@ export class Game {
       speedLabel: this.onFoot ? '' : imperial ? `${Math.round(speed * MPS_TO_MPH)} MPH` : `${Math.round(speed * 3.6)} KM/H`,
       gear: this.onFoot ? '' : v.gearLabel,
       objective,
+      pointer,
       warning,
       camLabel,
       osd,
