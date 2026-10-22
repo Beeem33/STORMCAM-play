@@ -145,7 +145,7 @@ export class CameraRig {
       // quick looks overshoot and settle; footfalls jolt the frame.
       this.zoom = clamp(this.zoom * Math.pow(1.15, -c.wheel), 1, 4);
       if (c.zoomHeld) this.zoom = Math.max(this.zoom, 2);
-      this.pitch = clamp(this.pitch, -1.25, 1.2);
+      this.pitch = clamp(this.pitch, -1.4, 1.2);
       const k = 150, damping = 17;
       const dy = wrapAngle(this.yaw - this.lookYaw);
       this.lookVel.x += (dy * k - this.lookVel.x * damping) * c.dt;
@@ -195,6 +195,11 @@ export class CameraRig {
   /** Direction the bodycam wearer's torso faces (spring-smoothed yaw). */
   get torsoYaw(): number {
     return this.lookYaw;
+  }
+
+  /** How far the bodycam wearer is looking up (+) or down (-), spring-smoothed. */
+  get torsoPitch(): number {
+    return this.lookPitch;
   }
 
   /** World-space forward direction of the camera. */

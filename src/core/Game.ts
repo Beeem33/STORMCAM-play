@@ -391,8 +391,11 @@ export class Game {
     const speedOnFoot = Math.hypot(this.walker.vel.x, this.walker.vel.z);
     this.body.update(sdt, this.onFoot && !this.walker.dead, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain);
     if (this.onFoot && this.body.chestCamPosition(_v)) {
-      // Sit the lens just proud of the jacket.
-      this.walker.eye.copy(_v).add(new THREE.Vector3(-Math.sin(this.rig.torsoYaw), 0, -Math.cos(this.rig.torsoYaw)).multiplyScalar(0.06));
+      // Sit the lens just proud of the jacket; looking down, the wearer leans
+      // forward over his feet so the jacket, legs and boots come into frame.
+      const lean = THREE.MathUtils.clamp((-this.rig.torsoPitch - 0.5) / 0.8, 0, 1);
+      this.walker.eye.copy(_v).add(new THREE.Vector3(-Math.sin(this.rig.torsoYaw), 0, -Math.cos(this.rig.torsoYaw)).multiplyScalar(0.06 + lean * 0.07));
+      this.walker.eye.y -= lean * 0.05;
     }
 
     // --- Camera.

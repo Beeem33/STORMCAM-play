@@ -36,7 +36,11 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   - Dashcam: wide lens with barrel distortion, heavier noise, GPS/time OSD.
   - Bodycam on foot: 90° fisheye lens. The torso follows the mouse through
     a spring, so looks overshoot and sway. Footfall jolts, wind buffeting,
-    timestamp OSD.
+    timestamp OSD. The lens rides the chest of a rigged, animated body
+    (`public/models/chaser_person.glb`, built in Blender by
+    `models/chaser_person_build.py` outside this repo), so the walk and run
+    cycles move the shot. Looking down shows the jacket, legs, boots and
+    hands; the head is hidden. The model is still a draft export.
   - All shake is scaled by a setting.
 - **Camera sensor post-processing:** auto exposure that lags (lightning blows
   out), filmic tone curve, sharpening, sensor noise that grows in the

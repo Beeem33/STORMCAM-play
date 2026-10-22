@@ -33,6 +33,17 @@ export class PlayerBody {
       if (!m.isMesh) return;
       m.frustumCulled = false; // skinned bounds don't follow the animation
       if (/PersonHead/i.test(m.name) || /PersonHead/i.test(m.parent?.name ?? '')) m.visible = false;
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+        // The lens can't see its own housing.
+        if (/^Cam/.test(mat.name)) mat.visible = false;
+        // Blender's cloth sheen exports as a full-strength white rim; keep it a faint tint of the fabric.
+        const phys = mat as THREE.MeshPhysicalMaterial;
+        if (phys.isMeshPhysicalMaterial && phys.sheen > 0) {
+          phys.sheen = Math.min(phys.sheen, 0.5);
+          phys.sheenColor.copy(phys.color).multiplyScalar(0.6);
+          phys.sheenRoughness = Math.max(phys.sheenRoughness, 0.8);
+        }
+      }
     });
     patchObject(model);
     this.root.add(model);

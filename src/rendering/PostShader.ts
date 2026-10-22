@@ -110,8 +110,14 @@ void main() {
   // Glass veil: dirt and water scatter the bright sky across the windshield.
   float lumIn = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col += vec3(0.85, 0.9, 0.95) * uGlassVeil * (0.25 + glass.b * 0.9) * (1.0 - interior) * 0.12;
-  // Droplets darken their rim and catch a highlight.
-  col *= 1.0 - glass.b * 0.12 * (1.0 - interior);
+  // Droplets: a darker body and a bright rim that reflects the sky above.
+  {
+    float slope = length((glass.rg - 0.5) * 2.0);
+    float rim = smoothstep(0.45, 0.95, slope) * smoothstep(0.15, 0.5, glass.b) * (1.0 - interior);
+    vec3 skyAbove = texture2D(tScene, clamp(suv + vec2(0.0, 0.18), 0.0, 1.0)).rgb;
+    col *= 1.0 - glass.b * 0.14 * (1.0 - interior);
+    col += skyAbove * rim * 0.35;
+  }
 
   // 4. Exposure + tone.
   col *= uExposure;

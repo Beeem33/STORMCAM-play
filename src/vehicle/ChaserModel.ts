@@ -253,7 +253,7 @@ export async function loadChaserModel(): Promise<VehicleParts> {
     });
     const rig: WiperRig = {
       obj: w,
-      axis: new THREE.Vector3(0, 1, 0),
+      axis: new THREE.Vector3(0, 0, 1),
       base: w.quaternion.clone(),
       px: wp.x,
       py: new THREE.Vector3().subVectors(wp, base.c).dot(upDir),
@@ -342,6 +342,6 @@ export async function loadChaserModel(): Promise<VehicleParts> {
     gauges,
     ledMat,
     steeringBase: steeringWheel.quaternion.clone(),
-    steeringAxis: new THREE.Vector3(0, 1, 0),
+    steeringAxis: new THREE.Vector3(0, 0, 1),
   };
 }

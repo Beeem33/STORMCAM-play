@@ -221,7 +221,7 @@ export class WorldProps {
     this.bales = new InstancePool(hayBaleAsset(), 600, this.group);
     const pole = telephonePoleAsset();
     this.poleAttach = pole.wireAttach;
-    this.poles = new InstancePool(pole, 900, this.group);
+    this.poles = new InstancePool(pole, 3200, this.group);
     this.posts = new InstancePool(fencePostAsset(), 2400, this.group);
     for (const p of [...this.trees.map((t) => t.pool), this.bales, this.poles, this.posts]) for (const m of p.meshes) patchObject(m);
 
@@ -296,9 +296,10 @@ export class WorldProps {
       if (!this.treeOwner.has(i + ',' + j)) this.buildSection(i, j);
     }
     this.primed = true;
-    if (Math.hypot(cam.x - this.lastLineCenter.x, cam.z - this.lastLineCenter.y) > 250) {
-      this.lastLineCenter.set(cam.x, cam.z);
-      this.rebuildPoles(cam);
+    // Power lines cover the whole (fixed) map: build once, rebuild only when a pole breaks.
+    if (this.lastLineCenter.x > 1e8) {
+      this.lastLineCenter.set(0, 0);
+      this.rebuildPoles(new THREE.Vector3(0, 0, 0));
     }
     if (Math.hypot(cam.x - this.lastLodCenter.x, cam.z - this.lastLodCenter.y) > 50) {
       this.lastLodCenter.set(cam.x, cam.z);
@@ -490,7 +491,7 @@ export class WorldProps {
     this.poles.clear();
     this.poleIndex = [];
     this.colliders.removeOwner('pole');
-    const R = 2600;
+    const R = (MAP_SECTIONS.sceneryMax + 1) * MILE;
     const spacing = 58;
     const add = (x: number, z: number, rot: number, key: string) => {
       const g = heightAt(x, z);
