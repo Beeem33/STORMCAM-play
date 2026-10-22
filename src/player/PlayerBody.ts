@@ -17,8 +17,8 @@ import { clamp, damp } from '../utils/MathUtils';
 const URL_GLB = `${import.meta.env.BASE_URL}models/chaser_person.glb`;
 const _qRoot = new THREE.Quaternion();
 const ARM_TRACK = /^(shoulder|upperarm|forearm|hand|thumb\d|index\d|middle\d|ring\d|pinky\d)_[LR]\.|^CarryPoint\./;
-/** How much of the gait clips' own arm swing to keep (the rest is the relaxed Idle arms). */
-const ARM_SWING = 0.35;
+/** How much of the gait clips' own arm swing to keep (the rest is the relaxed Idle arms). The clips are already authored with low swing. */
+const ARM_SWING = 1;
 
 interface Layered {
   body: THREE.AnimationAction;
@@ -101,7 +101,7 @@ export class PlayerBody {
   }
 
   /** Bend down and set the carried probe on the ground; `onTouchdown` fires when it touches. */
-  playPlace(onTouchdown: () => void, touchdownFraction = 0.55): boolean {
+  playPlace(onTouchdown: () => void, touchdownFraction = 0.633 / 1.4): boolean {
     const p = this.clips.get('place');
     if (!p || !this.loaded) {
       onTouchdown();

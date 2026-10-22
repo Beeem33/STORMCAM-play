@@ -197,6 +197,15 @@ export class ProbeSystem {
 
   private hold(src: THREE.Object3D, carryPoint: THREE.Object3D): void {
     const h = this.cloneProbe(src);
+    // The whip antenna is folded down for carrying, or it would cut across the bodycam shot.
+    h.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || (m.material as THREE.Material).name !== 'ProbeBase') return;
+      m.geometry = m.geometry.clone();
+      const pos = m.geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) if (pos.getY(i) > 0.16) pos.setY(i, 0.16);
+      pos.needsUpdate = true;
+    });
     // On the hand's CarryPoint, or in front of the belly when the body has no carry pose.
     if (carryPoint.name === 'CarryPoint') h.position.set(0, 0, 0);
     else h.position.set(0, 0.92, -0.4);
