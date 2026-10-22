@@ -192,7 +192,8 @@ export class Lightning {
 
   update(dt: number, storms: readonly StormCell[], cam: THREE.Vector3, viewport: THREE.Vector2): void {
     for (const s of storms) {
-      const rate = 0.13 * s.intensity * s.intensity * (1 + s.meso * 0.5) * (s.stage === 'developing' ? 0.4 : 1);
+      // A tornadic storm is electrically violent: near-constant flashes and bolts.
+      const rate = 0.13 * s.intensity * s.intensity * (1 + s.meso * 0.5) * (s.stage === 'developing' ? 0.4 : s.stage === 'tornadic' ? 2.6 : 1);
       let a = (this.acc.get(s.id) ?? Math.random()) + dt * rate;
       while (a >= 1) {
         a -= 1 + Math.random() * 0.6;

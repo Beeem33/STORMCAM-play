@@ -24,6 +24,8 @@ export interface HudState {
   objective: string[];
   /** Arrow to the tornado/storm: angle relative to where the camera looks (rad, clockwise). */
   pointer: { angle: number; label: string } | null;
+  /** The current objective, one short line. */
+  goal: string;
   warning: string;
   camLabel: string;
   osd: string;
@@ -84,6 +86,7 @@ export class UI {
       <div class="hud hidden">
         <div class="rec"><div class="line"><span class="dot"></span><span data-r="recLabel">STBY</span><span data-r="recTime">00:00</span></div></div>
         <div class="pointer hidden" data-r="pointer"><div class="arrow" data-r="arrow"></div><div class="plabel" data-r="plabel"></div></div>
+        <div class="goal" data-r="goal"></div>
         <div class="obj" data-r="obj"></div>
         <div class="toasts"></div>
         <div class="speed"><b data-r="speed">0</b><span data-r="unit">MPH</span><span data-r="gear">D</span></div>
@@ -256,7 +259,7 @@ export class UI {
   showControls(back?: () => void): void {
     const keys: [string, string][] = [
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
-      ['Q', 'Start / stop recording'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / pick up probes'],
+      ['Q', 'Start / stop recording'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / program / pick up probes'], ['L', 'Headlights / head torch on foot'],
       ['R', 'Weather radar'], ['M', 'GPS map'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
       ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Wheel / RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
     ];
@@ -357,6 +360,7 @@ export class UI {
     this.hud.querySelector('.rec')!.classList.toggle('on', h.recording);
     r.recLabel.textContent = h.recording ? 'REC' : 'STBY';
     r.recTime.textContent = h.recording ? fmtTime(h.clipTime) : 'Q TO RECORD';
+    r.goal.textContent = h.goal;
     r.pointer.classList.toggle('hidden', !h.pointer);
     if (h.pointer) {
       r.arrow.style.transform = `rotate(${h.pointer.angle}rad)`;

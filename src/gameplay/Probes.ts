@@ -27,6 +27,8 @@ export interface DeployedProbe {
   peakWind: number;
   rating: number;
   lofted: boolean;
+  /** Programmed with the field computer; only armed probes log data. */
+  armed: boolean;
 }
 
 export interface ProbeReport {
@@ -47,6 +49,10 @@ export class ProbeSystem {
   private held: THREE.Object3D | null = null;
   private nextId = 1;
   private ledMat: THREE.MeshStandardMaterial | null = null;
+  /** Steady red: placed but not programmed yet. */
+  private ledIdle: THREE.MeshStandardMaterial | null = null;
+  /** Opens the field programmer for a placed probe; call `arm` when it's done. */
+  onProgram: ((probe: DeployedProbe) => void) | null = null;
   private blink = 0;
   onEvent: ((text: string, kind: 'money' | 'info') => void) | null = null;
 
@@ -58,6 +64,10 @@ export class ProbeSystem {
       const m = o as THREE.Mesh;
       if (m.isMesh && (m.material as THREE.Material).name === 'ProbeLED') {
         this.ledMat = (m.material as THREE.MeshStandardMaterial).clone();
+        this.ledIdle = this.ledMat.clone();
+        this.ledIdle.color.set('#c81a14');
+        this.ledIdle.emissive.set('#ff2a1a');
+        this.ledIdle.emissiveIntensity = 2.5;
       }
     });
   }
@@ -105,11 +115,12 @@ export class ProbeSystem {
       stow: 'E  PUT PROBE BACK',
       close: 'E  CLOSE LIFTGATE',
       place: 'E  SET PROBE DOWN',
+      program: 'E  PROGRAM PROBE',
       pickup: 'E  PICK UP PROBE',
     }[a];
   }
 
-  private action(feet: THREE.Vector3): 'open' | 'take' | 'stow' | 'close' | 'place' | 'pickup' | null {
+  private action(feet: THREE.Vector3): 'open' | 'take' | 'stow' | 'close' | 'place' | 'program' | 'pickup' | null {
     if (!this.available) return null;
     const atGate = this.rearEntryWorld(_v).setY(feet.y).distanceTo(feet) < REACH_GATE;
     if (atGate) {
@@ -119,7 +130,8 @@ export class ProbeSystem {
       return 'close';
     }
     if (this.carrying) return 'place';
-    if (this.nearest(feet)) return 'pickup';
+    const near = this.nearest(feet);
+    if (near) return near.armed ? 'pickup' : 'program';
     return null;
   }
 
@@ -173,6 +185,11 @@ export class ProbeSystem {
           this.dropHeld();
           this.deploy(x, z, yaw);
         });
+        break;
+      }
+      case 'program': {
+        const d = this.nearest(feet)!;
+        this.onProgram?.(d);
         break;
       }
       case 'pickup': {
@@ -238,15 +255,26 @@ export class ProbeSystem {
     const y = heightAt(x, z);
     obj.position.set(x, y, z);
     obj.rotation.set(0, yaw, 0);
-    if (this.ledMat) {
-      obj.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.isMesh && (m.material as THREE.Material).name === 'ProbeLED') m.material = this.ledMat!;
-      });
-    }
+    this.setLed(obj, this.ledIdle);
     this.group.add(obj);
-    this.deployed.push({ id: this.nextId++, obj, pos: new THREE.Vector3(x, y, z), minEdge: Infinity, minDist: Infinity, peakWind: 0, rating: 0, lofted: false });
-    this.onEvent?.(`Probe ${this.nextId - 1} set · logging`, 'info');
+    this.deployed.push({ id: this.nextId++, obj, pos: new THREE.Vector3(x, y, z), minEdge: Infinity, minDist: Infinity, peakWind: 0, rating: 0, lofted: false, armed: false });
+    this.onEvent?.(`Probe ${this.nextId - 1} set. Program it (E) to start logging.`, 'info');
+  }
+
+  /** The field programmer finished: the probe starts logging. */
+  arm(d: DeployedProbe): void {
+    if (d.armed || !this.deployed.includes(d)) return;
+    d.armed = true;
+    this.setLed(d.obj, this.ledMat);
+    this.onEvent?.(`Probe ${d.id} armed · logging`, 'money');
+  }
+
+  private setLed(obj: THREE.Object3D, mat: THREE.Material | null): void {
+    if (!mat) return;
+    obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && (m.material as THREE.Material).name === 'ProbeLED') m.material = mat;
+    });
   }
 
   update(dt: number): void {
@@ -265,6 +293,16 @@ export class ProbeSystem {
     for (const d of this.deployed) {
       if (d.lofted) continue;
       const dist = Math.hypot(d.pos.x - t.position.x, d.pos.z - t.position.z);
+      if (!d.armed) {
+        // Not programmed: no data, but the vortex still takes it.
+        if (dist < t.radius * 0.95) {
+          d.lofted = true;
+          d.obj.updateMatrixWorld(true);
+          this.tornadoes.debris.throwObject(d.obj, new THREE.Vector3(0, 10, 0), 6);
+          this.onEvent?.(`Probe ${d.id} lost before it was programmed`, 'info');
+        }
+        continue;
+      }
       const edge = Math.max(0, dist - t.radius);
       if (edge < d.minEdge) {
         d.minEdge = edge;
@@ -297,6 +335,10 @@ export class ProbeSystem {
     let lostCount = 0;
     for (const d of this.deployed) {
       if (d.lofted) lostCount++;
+      if (!d.armed) {
+        lines.push(`Probe ${d.id} · never programmed, no data${d.lofted ? ' (lost)' : ''}`);
+        continue;
+      }
       if (!Number.isFinite(d.minEdge)) {
         lines.push(`Probe ${d.id} · no tornado came near`);
         continue;

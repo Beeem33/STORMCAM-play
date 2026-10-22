@@ -34,6 +34,8 @@ export interface RenderSettings {
  *   water/interior mask) → sensor post → screen.
  * Also owns auto exposure and the reflection environment captured from the sky.
  */
+const _dreadTint = new THREE.Color();
+
 export class Renderer {
   readonly gl: THREE.WebGLRenderer;
   readonly sky = new CloudSky();
@@ -62,6 +64,8 @@ export class Renderer {
   private lumaPending = false;
   private measuredLogLum = Math.log(0.15);
   exposure = 1.2;
+  /** 0..1 how close and present a tornado is: darker, greener, tighter grade. */
+  dread = 0;
   private frame = 0;
 
   /** Per-step CPU timings (ms) of the last frame, for profiling. */
@@ -270,7 +274,7 @@ export class Renderer {
     }
     tm = this.mark('luma', tm);
     const avgLum = Math.exp(this.measuredLogLum);
-    const target = THREE.MathUtils.clamp((0.17 / Math.max(avgLum, 1e-4)) * lens.ev, 0.35, 24);
+    const target = THREE.MathUtils.clamp((0.17 / Math.max(avgLum, 1e-4)) * lens.ev * (1 - 0.15 * this.dread), 0.35, 24);
     // Brighten slowly, darken quickly — lightning blows out before the camera reacts.
     const rate = target > this.exposure ? 1.1 : 2.6;
     this.exposure += (target - this.exposure) * (1 - Math.exp(-rate * dt));
@@ -288,10 +292,12 @@ export class Renderer {
     u.uChroma.value = lens.chroma;
     u.uNoise.value = 0.022 * lens.noise * this.settings.noiseAmount;
     u.uSharpen.value = lens.sharpen;
-    u.uVignette.value = lens.vignette;
-    u.uSaturation.value = lens.saturation;
-    u.uContrast.value = lens.contrast;
-    (u.uTint.value as THREE.Color).copy(lens.tint);
+    // Dread: near a tornado the light goes dim, sickly green-grey and closes in.
+    const dr = this.dread;
+    u.uVignette.value = lens.vignette + 0.28 * dr;
+    u.uSaturation.value = lens.saturation * (1 - 0.22 * dr);
+    u.uContrast.value = lens.contrast + 0.14 * dr;
+    (u.uTint.value as THREE.Color).copy(lens.tint).multiply(_dreadTint.setRGB(1 - 0.16 * dr, 1 - 0.02 * dr, 1 - 0.12 * dr));
     // Blur scales with frame time so it reads as a fixed 1/60 s-ish shutter.
     u.uBlur.value = this.settings.motionBlur ? lens.shutter * Math.min(1.5, 1 / 60 / Math.max(dt, 1 / 240)) : 0;
     u.uGlassVeil.value = this.glassVeil;

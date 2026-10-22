@@ -13,6 +13,8 @@ import { Walker } from '../player/Walker';
 import { PlayerBody } from '../player/PlayerBody';
 import { ProbeSystem } from '../gameplay/Probes';
 import { WindDebris } from '../weather/WindDebris';
+import { ProbeTerminal } from '../ui/ProbeTerminal';
+import { Grass } from '../environment/Grass';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -27,7 +29,7 @@ import { AudioSystem } from '../audio/AudioSystem';
 import type { AudioFrameState } from '../audio/AudioTypes';
 import { UI, type HudState } from '../ui/UI';
 import { clamp, damp, MPS_TO_MPH } from '../utils/MathUtils';
-import { MAP_HALF, heightAt } from '../environment/WorldShape';
+import { MAP_HALF, MILE, heightAt } from '../environment/WorldShape';
 
 export type GameState = 'menu' | 'playing' | 'paused' | 'report';
 
@@ -57,6 +59,8 @@ export class Game {
   readonly world: WorldProps;
   readonly probes: ProbeSystem;
   readonly windDebris = new WindDebris();
+  readonly terminal: ProbeTerminal;
+  readonly grass = new Grass();
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
@@ -79,6 +83,9 @@ export class Game {
   dayTime = 0;
   onFoot = false;
   headlightsOn = false;
+  /** Head torch, worn on foot (L toggles it out of the truck). */
+  headlampOn = false;
+  private readonly headlamp = new THREE.SpotLight('#fff1dc', 0, 70, 0.38, 0.55, 1.4);
   private radarOpen = false;
   private mapOpen = false;
   private last = performance.now();
@@ -92,6 +99,7 @@ export class Game {
   private endReason = '';
   /** The truck was carried up by the vortex with the chaser inside. */
   private driverKilled = false;
+  private tornadoSeen = false;
   /** Seconds since the truck was last inside the tornado's core region. */
   private inVortexTime = 0;
   private wreckToasted = false;
@@ -119,8 +127,10 @@ export class Game {
     this.windshield = new Windshield(this.parts);
     this.vehicle.colliders = this.world.query;
     this.probes = new ProbeSystem(this.parts, this.tornadoes);
-    this.scene.add(this.probes.group, this.windDebris.mesh);
+    this.scene.add(this.probes.group, this.windDebris.mesh, this.headlamp, this.headlamp.target, this.grass.mesh);
     this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
+    this.terminal = new ProbeTerminal(uiRoot);
+    this.probes.onProgram = (d) => this.terminal.show(d.id, () => this.probes.arm(d));
     this.vehicle.onRighted = () => {
       if (this.state === 'playing') this.ui.toast('You rock the truck back onto its wheels.', 'info', 4000);
     };
@@ -220,22 +230,24 @@ export class Game {
   // ------------------------------------------------------------------ flow
   private setupDay(): void {
     const d = this.career.data.day;
-    const start = this.world.startPose;
+    const start = randomStart(this.world.startPose);
     this.vehicle.placeAt(start.x, start.z, start.heading);
     this.vehicle.health = 100;
     this.vehicle.windshieldCracks = 0;
     this.vehicle.destroyed = false;
-    this.weather.startDay({ day: d, seed: 1000 + d * 7919 }, { x: 0, z: 0 });
+    this.weather.startDay({ day: d, seed: (Math.random() * 1e9) | 0 }, { x: start.x, z: start.z });
     this.tornadoes.clear();
     this.windshield.clear();
     this.recorder.reset();
     this.probes.reset();
+    this.terminal.close();
     this.windDebris.clear();
     this.radar.reset();
     this.dayTime = 0;
     this.distanceDriven = 0;
     this.endTimer = -1;
     this.driverKilled = false;
+    this.tornadoSeen = false;
     this.wreckToasted = false;
     this.calmToasted = false;
     this.onFoot = false;
@@ -254,7 +266,9 @@ export class Game {
     this.state = 'playing';
     this.ui.showHud();
     this.input.requestLock();
-    this.ui.toast(`Day ${this.career.data.day}. A supercell west of town is about to drop a tornado. Get the probes out of the back (E at the liftgate) and set them in its path.`, 'info', 9000);
+    const lead = this.weather.storms.find((s) => s.tornadic);
+    const where = lead ? ` to the ${compassWord(lead.x - this.vehicle.pos.x, lead.z - this.vehicle.pos.z)}` : '';
+    this.ui.toast(`Day ${this.career.data.day}. A supercell${where} is about to drop a tornado. Follow the red arrow.`, 'info', 8000);
   }
 
   pause(): void {
@@ -382,6 +396,7 @@ export class Game {
     const baseAlt = this.lighting.sky.baseAlt;
     this.tornadoes.update(playing ? sdt : 0, baseAlt);
     this.probes.update(playing ? sdt : 0);
+    if (this.terminal.open && (!this.onFoot || this.walker.dead || this.state !== 'playing')) this.terminal.close();
     const L = this.weather.local;
     const t = this.tornadoes.tornado;
 
@@ -409,7 +424,7 @@ export class Game {
     // --- On foot.
     if (this.onFoot && playing) {
       // Setting a probe down roots the feet until it's on the ground.
-      const rooted = this.body.busy;
+      const rooted = this.body.busy || this.terminal.open;
       const fwd = rooted ? 0 : (inp.isDown('KeyW') ? 1 : 0) - (inp.isDown('KeyS') ? 1 : 0);
       const right = rooted ? 0 : (inp.isDown('KeyD') ? 1 : 0) - (inp.isDown('KeyA') ? 1 : 0);
       this.tornadoes.windAt(_v.copy(this.walker.pos).setY(this.walker.pos.y + 1), _w).add(L.wind);
@@ -446,13 +461,22 @@ export class Game {
             sway: this.body.chestSway(_qSway) ? _eSway.setFromQuaternion(_qSway, 'YXZ') : null,
           }
         : null,
-      mouseDX: playing ? inp.mouseDX : 0, mouseDY: playing ? inp.mouseDY : 0, wheel: playing ? inp.wheel : 0,
+      mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0, wheel: playing ? inp.wheel : 0,
       zoomHeld: inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
       shake: this.onFoot && eff.tripod && this.walker.stillTime > 1.5 ? shake * 0.1 : shake,
       fov: this.settings.data.fov, wind: this.windAtCam.length(), impulse: this.shakeImpulse,
       bodycamFov: this.settings.data.bodycamFov,
     });
     const cam = this.rig.camera;
+    // Head torch rides just above the lens and points where the chaser looks.
+    const lamp = this.onFoot && this.headlampOn && !this.walker.dead;
+    this.headlamp.visible = lamp;
+    if (lamp) {
+      this.headlamp.intensity = 260;
+      this.headlamp.position.copy(cam.position).y += 0.35;
+      this.rig.forward(this.headlamp.target.position).multiplyScalar(12).add(cam.position);
+      this.headlamp.target.updateMatrixWorld();
+    }
     this.camVel.subVectors(cam.position, this.prevCam).divideScalar(Math.max(dt, 1e-3));
     if (this.camVel.length() > 200) this.camVel.set(0, 0, 0);
     this.prevCam.copy(cam.position);
@@ -468,6 +492,9 @@ export class Game {
     const tornadoDist = t ? t.distanceTo(cam.position) : 1e9;
     const dust = t ? t.debris * t.params.debrisDensity * clamp(1 - (tornadoDist - t.radius) / (t.radius * 6 + 300), 0, 1) : 0;
     atmo.uDust.value = damp(atmo.uDust.value, dust, 2, dt);
+    // Dread grade: builds from ~6 km out as the tornado nears, and under the storm's darkest cloud.
+    const dread = t ? t.presence * (1 - clamp((tornadoDist - 400) / 5600, 0, 1)) : L.cover * 0.35;
+    this.renderer.dread = damp(this.renderer.dread, clamp(dread, 0, 1), 0.6, dt);
     this.lighting.update(cam.position, L.cover, L.sunBlocked, L.rain, this.lightning.flash);
     const sky = this.renderer.sky;
     sky.setParams(this.lighting.sky);
@@ -477,6 +504,7 @@ export class Game {
     atmo.uWetness.value = this.weather.wetness;
     atmo.uWind.value.set(this.windAtCam.x, this.windAtCam.z);
     this.windDebris.update(playing ? sdt : 0, cam.position, this.windAtCam);
+    this.grass.update(cam.position, this.vehicleObj);
     this.terrain.update(cam, this.renderer.renderHeight);
     this.tornadoes.renderer.update(t, this.time, cam.position, this.lighting.sky, 1 - L.sunBlocked, this.lightning.flash);
 
@@ -586,6 +614,8 @@ export class Game {
 
   private handleKeys(): void {
     const inp = this.input;
+    // The probe programmer owns the keyboard while it's open.
+    if (this.terminal.open) return;
     if (inp.wasPressed('KeyQ')) {
       const on = this.recorder.toggle(this.time);
       this.audio.recordBeep(on);
@@ -596,7 +626,12 @@ export class Game {
       this.windshield.mode = order[(order.indexOf(this.windshield.mode) + 1) % order.length];
       this.ui.toast(`Wipers: ${this.windshield.mode.toUpperCase()}`);
     }
-    if (inp.wasPressed('KeyL')) this.headlightsOn = !this.headlightsOn;
+    if (inp.wasPressed('KeyL')) {
+      if (this.onFoot) {
+        this.headlampOn = !this.headlampOn;
+        this.ui.toast(this.headlampOn ? 'Head torch on' : 'Head torch off', 'info', 1500);
+      } else this.headlightsOn = !this.headlightsOn;
+    }
     if (inp.wasPressed('KeyT')) this.settings.set('timestamp', !this.settings.data.timestamp);
     if (inp.wasPressed('KeyR')) {
       this.radarOpen = !this.radarOpen;
@@ -703,10 +738,12 @@ export class Game {
     a.windSpeed = this.windAtCam.length();
     const tor = this.tornadoes.tornado;
     a.tornado.active = !!tor;
+    a.siren = 0;
     if (tor) {
       a.tornado.position.copy(tor.position);
       a.tornado.distance = tor.distanceTo(cam.position);
       a.tornado.intensity = tor.intensity01;
+      a.siren = Math.min(1, tor.presence * 1.5);
       a.tornado.radius = tor.radius;
     }
     this.audio.update(a);
@@ -738,10 +775,23 @@ export class Game {
       const rel = Math.atan2(ax - focus.x, -(az - focus.z)) - Math.atan2(_v.x, -_v.z);
       pointer = { angle: rel, label: `${t ? 'TORNADO' : 'STORM'}  ${dist(Math.hypot(ax - focus.x, az - focus.z))}` };
     }
-    if (this.probes.available) {
-      const used = this.probes.deployed.length;
-      objective.push(`PROBES  ${used}/4 SET${this.probes.carrying ? '  ·  CARRYING' : ''}`);
-    }
+    // The one thing to do next.
+    const P = this.probes;
+    const armed = P.deployed.filter((d) => d.armed).length;
+    const unarmed = P.deployed.filter((d) => !d.armed && !d.lofted).length;
+    if (t) this.tornadoSeen = true;
+    let goal = '';
+    if (!t && !this.tornadoSeen) goal = 'Head toward the storm. The tornado is about to form.';
+    else if (!t) goal = 'The tornado has lifted. Esc → End chase to sell your data.';
+    else if (P.carrying) goal = "Set the probe down in the tornado's path (E)";
+    else if (unarmed > 0) goal = 'Program the probe you set down (E at the probe)';
+    else if (P.available && P.inTruck > 0 && P.deployed.length < 4) {
+      const ahead = t.distanceTo(focus) < 1600;
+      if (!ahead) goal = 'Get ahead of the tornado';
+      else if (!this.onFoot) goal = 'Stop in its path and get out (F)';
+      else goal = 'Grab a probe from the back of the truck (E at the liftgate)';
+    } else goal = 'Film the tornado (Q) and stay alive';
+    if (P.available) objective.push(`PROBES  ${armed}/4 ARMED${unarmed ? `  ·  ${unarmed} NOT PROGRAMMED` : ''}`);
     if (v.destroyed) objective.push('TRUCK WRECKED');
     const warning = '';
 
@@ -751,6 +801,7 @@ export class Game {
       const d = this.doorWorld(new THREE.Vector3());
       if (Math.hypot(d.x - this.walker.pos.x, d.z - this.walker.pos.z) < 3.5) prompt = 'F  GET IN';
       if (!this.body.busy) prompt = this.probes.prompt(this.walker.pos) || prompt;
+      if (this.terminal.open) prompt = '';
     }
     let center = '';
     if (this.onFoot && this.walker.dead) center = 'Caught in the tornado';
@@ -784,6 +835,7 @@ export class Game {
       gear: this.onFoot ? '' : v.gearLabel,
       objective,
       pointer,
+      goal,
       warning,
       camLabel,
       osd,
@@ -849,4 +901,31 @@ export class Game {
     p.taillightMat.emissiveIntensity = 0.4 + (this.input.isDown('KeyS') && !this.onFoot ? 3 : 0) + hl;
     p.anemometer.rotation.y += dt * Math.min(40, this.windAtCam.length() * 1.6 + v.speed * 1.2);
   }
+}
+
+/**
+ * Where a chase day starts: sometimes the gas station, usually a random spot
+ * on one of the section roads inside the chase area, in the right-hand lane.
+ */
+function randomStart(station: { x: number; z: number; heading: number }): { x: number; z: number; heading: number } {
+  if (Math.random() < 0.2) return station;
+  const lim = MAP_HALF - 250;
+  const roads = [-1, 0, 1].filter((k) => Math.abs(k * MILE) < MAP_HALF);
+  const k = roads[Math.floor(Math.random() * roads.length)] * MILE;
+  // Keep clear of the crossroads themselves.
+  let along = (Math.random() * 2 - 1) * lim;
+  if (Math.abs(along - Math.round(along / MILE) * MILE) < 60) along += 120;
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  if (Math.random() < 0.5) {
+    // North–south road: heading 0 = north (-z); the right lane is east of the centreline going north.
+    return { x: k + 2.2 * dir, z: along, heading: dir > 0 ? 0 : Math.PI };
+  }
+  // East–west road: heading π/2 = east; the right lane is south (+z) going east.
+  return { x: along, z: k + 2.2 * dir, heading: dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+}
+
+function compassWord(dx: number, dz: number): string {
+  const names = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+  const deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
+  return names[Math.round(deg / 45) % 8];
 }

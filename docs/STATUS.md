@@ -24,6 +24,25 @@ What exists in the code today, and what doesn't. Updated with each milestone.
     center-pivot sprinklers.
   - Billboards, hay stacks, abandoned trucks, stock tanks, round bales.
   - Telephone poles with sagging wires, barbed-wire fences, road signs.
+- **Objectives:** one line under the tornado arrow always says what to do
+  next: head for the storm, get ahead of the tornado, grab a probe, set it
+  down, program it, then film and survive, then cash in.
+- **Probe programming:** a placed probe starts unarmed (steady red LED) and
+  logs nothing. E at the probe opens its field programmer: three quick
+  calibration checks (add, subtract, multiply or divide) typed on the keypad.
+  Wrong answers get a new code. The world keeps running while you type.
+  Armed probes blink green and log data.
+- **Head torch:** L on foot toggles a head-mounted spotlight.
+- **Random days:** the player starts at a random spot on the section roads
+  (sometimes the gas station), and the storms come from a random direction
+  with the tornadic storm placed randomly upstream.
+- **Grass:** ~70k wind-blown blades around the camera, by field type (tall
+  wheat and prairie, short pasture, sparse young crops, bare plowed ground,
+  shaggy verges along the roads), flattened under the truck.
+- **Storm menace:** near a tornado the image darkens and shifts to a sickly
+  green-grey with a tighter vignette; tornadic storms flash and strike about
+  2.6x more often; outdoor warning sirens wail in the distance while a
+  tornado is down.
 - **Sensor probes:** four orange "turtle" probes ride in a tote in the cargo
   area. On foot, E at the back of the truck opens the liftgate and takes a
   probe; the chaser carries it in both hands (no sprinting) and E sets it
@@ -36,10 +55,11 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 - **Ending a day:** only the chaser's death ends it: caught on foot, or, in
   the truck, a violent impact while caught by the tornado (slammed down at
   over 22 m/s or into an object at over 18 m/s within 4 s of being in the
-  core). Being sucked up is survivable: inside the vortex the truck is
+  core). Landings and collisions count once per impact (not per contact
+  point), so jumps and rollovers do modest damage. Being sucked up is survivable: inside the vortex the truck is
   carried no higher than about 20 m and drifts down at most 10 m/s. A rolled truck is rocked back
-  onto its wheels after 3 s; at 0% health it's wrecked but limps on at about
-  a third of its power. When the storms die out, a message says to end the
+  onto its wheels after 3 s; at 0% health it's wrecked but keeps about 70%
+  of its power. When the storms die out, a message says to end the
   chase from the pause menu to get paid.
 - **Wind:** tree crowns lean downwind, pump with the gusts and flutter
   (stronger near the tornado); above ~13 mph leaves, straw, grass and twigs

@@ -60,7 +60,8 @@ export class WeatherSystem {
     this.wetness = 0.05;
     const count = 2 + (r() < 0.5 ? 1 : 0);
     // Steering flow from the south-west, 8–12 m/s.
-    const flowAng = THREE.MathUtils.degToRad(40 + r() * 25); // bearing the storms move TOWARD (NE-ish)
+    // Bearing the storms move toward: any direction, so storms come from anywhere.
+    const flowAng = r() * Math.PI * 2;
     const speed = 7.5 + r() * 3 + Math.min(3, sc.day * 0.3);
     const tornadicIdx = Math.floor(r() * count);
     // Storms fire upstream (south-west) and their tracks cross the 4 × 4-mile chase area.
@@ -73,8 +74,8 @@ export class WeatherSystem {
       // others fire farther out on either side.
       let upstream: number, lateral: number;
       if (lead) {
-        upstream = 2800 + r() * 800;
-        lateral = (r() - 0.5) * 1600;
+        upstream = 2500 + r() * 1800;
+        lateral = (r() - 0.5) * 3200;
       } else {
         upstream = 5000 + r() * 2000;
         lateral = side * (3600 + r() * 1200);

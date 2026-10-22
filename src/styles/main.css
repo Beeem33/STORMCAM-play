@@ -72,9 +72,23 @@ button.btn:disabled { opacity: 0.4; cursor: default; }
 .hud .pointer { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
 .hud .pointer .arrow { width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 24px solid #ff5b4d; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); transition: transform 0.08s linear; }
 .hud .pointer .plabel { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+.hud .goal { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(640px, 90vw); text-align: center; font-size: 13px; color: #ffe08a; letter-spacing: 0.03em; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; }
+.probe-term { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); width: min(380px, calc(100vw - 32px)); background: #0c120d; border: 2px solid #2d3a2c; border-radius: 10px; padding: 14px 16px 12px; color: #7dff8c; font-family: 'IBM Plex Mono', ui-monospace, monospace; box-shadow: 0 10px 40px rgba(0,0,0,0.6), inset 0 0 30px rgba(60,255,90,0.06); z-index: 30; }
+.probe-term.hidden { display: none; }
+.probe-term .pt-head { display: flex; justify-content: space-between; font-size: 11px; color: #4fbf5c; border-bottom: 1px solid #1f3a22; padding-bottom: 6px; margin-bottom: 10px; }
+.probe-term .pt-label { font-size: 11px; color: #4fbf5c; letter-spacing: 0.1em; }
+.probe-term .pt-q { font-size: 32px; font-weight: 600; margin: 6px 0 4px; }
+.probe-term .pt-in { font-size: 28px; color: #c9ffd0; min-height: 36px; border: 1px solid #1f3a22; border-radius: 4px; padding: 2px 8px; background: #071008; }
+.probe-term .pt-steps { display: flex; gap: 6px; margin: 10px 0 4px; }
+.probe-term .pt-steps i { flex: 1; height: 6px; border-radius: 3px; background: #1f3a22; }
+.probe-term .pt-steps i.ok { background: #5cff6e; }
+.probe-term .pt-status { font-size: 12px; min-height: 16px; }
+.probe-term .pt-status.ok { color: #7dff8c; }
+.probe-term .pt-status.bad { color: #ff6a5a; }
+.probe-term .pt-help { font-size: 10px; color: #3f8a49; margin-top: 6px; }
 .hud .cam { position: absolute; right: 22px; bottom: 20px; font-size: 12px; letter-spacing: 0.08em; color: #cfd6da; }
 .hud .osd { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font: 500 15px var(--mono); letter-spacing: 0.08em; color: #ffffff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; opacity: 0.92; }
-.hud .toasts { position: absolute; top: 96px; left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.hud .toasts { position: absolute; top: 120px; left: 22px; max-width: min(460px, 60vw); display: flex; flex-direction: column; gap: 6px; }
 .hud .toast { font-size: 12px; background: rgba(0,0,0,0.55); padding: 5px 9px; border-left: 3px solid #f2f4f5; animation: toastIn 200ms ease-out; }
 .hud .toast.money { border-color: #6be38b; }
 .hud .toast.alert { border-color: #ff5b4d; }

@@ -202,7 +202,9 @@ export class Vehicle {
     // On its side or roof and settled: rock it back onto its wheels (a chase
     // crew would winch or push it over) rather than ending the day.
     _v1.set(0, 1, 0).applyQuaternion(this.quat);
-    if (_v1.y < 0.25 && this.vel.length() < 2.5) this.flippedTime += dt;
+    this.landCooldown -= dt;
+    this.hitCooldown -= dt;
+    if (_v1.y < 0.35 && this.vel.length() < 5) this.flippedTime += dt;
     else this.flippedTime = Math.max(0, this.flippedTime - dt * 2);
     if (this.flippedTime > 3) {
       this.placeAt(this.pos.x, this.pos.z, this.heading);
@@ -271,7 +273,7 @@ export class Vehicle {
     const fwdSpeed = this.vel.dot(fwd);
     const ratio = this.gear < 0 ? REVERSE : GEARS[Math.max(0, this.gear - 1)];
     const shifting = this.shiftTimer > 0 && this.gear > 0;
-    const driveTorque = this.engineOn && !shifting ? torqueAt(this.rpm) * this.throttle * ratio * FINAL * 0.82 * (this.rpm > REDLINE ? 0.2 : 1) * (this.destroyed ? 0.35 : 1) : 0;
+    const driveTorque = this.engineOn && !shifting ? torqueAt(this.rpm) * this.throttle * ratio * FINAL * 0.82 * (this.rpm > REDLINE ? 0.2 : 1) * (this.destroyed ? 0.7 : 1) : 0;
     const driveDir = this.gear < 0 ? -1 : 1;
     const braking = this.gear < 0 ? input.throttle : input.brake;
 
@@ -439,6 +441,7 @@ export class Vehicle {
 
   private bodyGroundContacts(q: THREE.Quaternion, h: number): void {
     void h;
+    let hit = 0;
     for (const lp of Vehicle.BODY_POINTS) {
       const p = _v1.copy(lp).applyQuaternion(q).add(this.pos);
       const g = heightAt(p.x, p.z);
@@ -453,13 +456,18 @@ export class Vehicle {
       const F = new THREE.Vector3(Ft.x, Fn, Ft.z);
       this.force.add(F);
       this.torque.add(new THREE.Vector3().crossVectors(rArm, F));
-      if (vc.y < -4) {
-        this.damage(Math.abs(vc.y) * 1.5);
-        this.onImpact?.(Math.abs(vc.y), 'ground');
-        this.jolt = 1;
-      }
+      hit = Math.max(hit, -vc.y);
+    }
+    // One landing is one impact: take the hardest point once, not every point every sub-step.
+    if (hit > 6 && this.landCooldown <= 0) {
+      this.damage((hit - 6) * 2.5);
+      this.onImpact?.(hit, 'ground');
+      this.jolt = 1;
+      this.landCooldown = 0.6;
     }
   }
+  private landCooldown = 0;
+  private hitCooldown = 0;
 
   private resolveColliders(): void {
     const fwd = _v1.set(0, 0, -1).applyQuaternion(this.quat);
@@ -512,10 +520,11 @@ export class Vehicle {
           this.vel.z *= 0.92;
           this.angVel.y += vn * 0.04 * Math.sign(off || 1) * (nx * fwd.z - nz * fwd.x);
           const impact = -vn;
-          if (impact > 2) {
+          if (impact > 2 && this.hitCooldown <= 0) {
             this.damage(impact > 8 ? (impact - 6) * 2.5 : 0);
             this.onImpact?.(impact, 'collision');
             this.jolt = Math.min(1, this.jolt + impact * 0.08);
+            this.hitCooldown = 0.4;
           }
           c.onHit?.(impact);
         }
