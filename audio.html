@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STORMCAM audio preview</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; padding: 16px; background: #15171a; color: #d8dadf; font: 13px/1.4 ui-monospace, Menlo, monospace; }
+      h1 { font-size: 15px; margin: 0 0 12px; letter-spacing: 0.04em; }
+      h2 { font-size: 12px; margin: 18px 0 6px; color: #8d94a0; text-transform: uppercase; letter-spacing: 0.08em; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 4px 24px; }
+      .row { display: grid; grid-template-columns: 150px 1fr 64px; align-items: center; gap: 8px; }
+      .row input[type=range] { width: 100%; }
+      .row output { text-align: right; color: #f0c674; }
+      button { background: #2a2e35; color: #e6e6e6; border: 1px solid #3b414b; border-radius: 4px; padding: 6px 10px; margin: 3px 4px 3px 0; font: inherit; cursor: pointer; }
+      button:hover { background: #343944; }
+      button.primary { background: #3d5a80; border-color: #5179ad; }
+      #meter { height: 10px; background: #222; border-radius: 3px; overflow: hidden; margin-top: 8px; position: relative; max-width: 600px; }
+      #meter > div { height: 100%; background: linear-gradient(90deg, #4caf50, #cddc39 70%, #ff5722); width: 0; }
+      #meterText { color: #8d94a0; margin-top: 4px; }
+      table { border-collapse: collapse; margin-top: 8px; }
+      td, th { padding: 2px 10px; text-align: right; border-bottom: 1px solid #2a2e35; }
+      td:first-child, th:first-child { text-align: left; }
+      .bad { color: #ff7b72; }
+      .ok { color: #7ee787; }
+      select { background: #2a2e35; color: #e6e6e6; border: 1px solid #3b414b; font: inherit; }
+    </style>
+  </head>
+  <body>
+    <h1>STORMCAM — procedural audio preview</h1>
+    <div id="app"></div>
+    <script type="module" src="/src/dev/audioPreview.ts"></script>
+  </body>
+</html>

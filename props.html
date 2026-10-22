@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STORMCAM Props</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #8f989e; overflow: hidden; font: 12px/1.4 system-ui, sans-serif; }
+      canvas { display: block; }
+      #ui { position: fixed; top: 8px; left: 8px; max-height: calc(100% - 16px); overflow: auto; background: rgba(20,22,24,0.72); color: #e8e8e4; padding: 8px 10px; border-radius: 6px; }
+      #ui button { display: block; width: 100%; text-align: left; margin: 1px 0; background: transparent; color: inherit; border: 0; padding: 2px 4px; cursor: pointer; font: inherit; }
+      #ui button:hover { background: rgba(255,255,255,0.12); }
+      #ui span { opacity: 0.6; float: right; margin-left: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="ui"></div>
+    <script type="module" src="/src/dev/propsPreview.ts"></script>
+  </body>
+</html>
