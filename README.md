@@ -1,5 +1,7 @@
 # STORMCAM
 
+**[▶ Play in your browser](https://beeem33.github.io/STORMCAM-play/)**: Chrome or Edge on a desktop or laptop, keyboard and mouse.
+
 A first-person storm-chasing game that should look like real dashcam footage.
 Drive the section roads of central Kansas, read the radar, get into position
 in front of a supercell, film the tornado and get out alive. You get paid for
@@ -17,6 +19,10 @@ npm install
 npm run dev        # http://localhost:8191 (also on your LAN)
 npm run build      # type-check + production build into dist/
 ```
+
+`npm run deploy` builds and force-pushes only `dist/` to the public repo
+[Beeem33/STORMCAM-play](https://github.com/Beeem33/STORMCAM-play), which GitHub
+Pages serves at the play link above; this source repo stays private.
 
 Any static file server can host `dist/` (it uses relative paths). Chrome or
 Edge on a desktop/laptop GPU is the target. The game uses pointer lock, so
