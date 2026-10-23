@@ -36,9 +36,16 @@ button.btn:disabled { opacity: 0.4; cursor: default; }
   background: linear-gradient(90deg, rgba(5,7,9,0.82) 0%, rgba(5,7,9,0.35) 45%, rgba(5,7,9,0) 70%);
 }
 .menu .col { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
-.menu h1 { font: 700 64px/1 var(--ui-font); letter-spacing: 0.14em; margin: 0 0 4px; }
-.menu h1 .rec { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); margin-left: 12px; vertical-align: middle; animation: blink 1.2s steps(2, start) infinite; }
-.menu .tag { color: var(--fg-dim); font-size: 15px; line-height: 1.5; margin: 0 0 22px; }
+.menu h1 { font: 400 60px/1 'Share Tech Mono', var(--mono); letter-spacing: 0.1em; margin: 0 0 6px; display: flex; align-items: center; gap: 16px; white-space: nowrap; text-shadow: 0 0 18px rgba(255,255,255,0.18); }
+.menu h1 .rec { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px rgba(255,60,50,0.8); animation: blink 1.2s steps(2, start) infinite; }
+.menu .tag { color: var(--fg-dim); font: 400 15px/1.5 'Share Tech Mono', var(--mono); letter-spacing: 0.03em; margin: 0 0 22px; }
+.menu .btn { font-family: 'Share Tech Mono', var(--mono); letter-spacing: 0.12em; }
+.death-card { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; z-index: 40; font-family: 'Share Tech Mono', var(--mono); color: #eef1f2; opacity: 0; transition: opacity 0.6s ease; pointer-events: none; text-align: center; padding: 0 24px; }
+.death-card.on { opacity: 1; }
+.death-card .dc-title { font-size: clamp(34px, 7vw, 64px); letter-spacing: 0.18em; color: #ff4a3d; text-shadow: 0 0 22px rgba(255,60,50,0.5); }
+.death-card .dc-sub { font-size: clamp(15px, 2.2vw, 20px); letter-spacing: 0.05em; max-width: 720px; line-height: 1.5; opacity: 0; transition: opacity 0.8s ease 0.9s; }
+.death-card .dc-osd { font-size: 13px; letter-spacing: 0.14em; color: #8a9396; opacity: 0; transition: opacity 0.8s ease 1.8s; }
+.death-card.on .dc-sub, .death-card.on .dc-osd { opacity: 1; }
 .menu .career { font: 500 12px var(--mono); color: var(--fg-dim); margin-top: 14px; letter-spacing: 0.05em; }
 @keyframes blink { to { visibility: hidden; } }
 
@@ -121,7 +128,7 @@ button.btn:disabled { opacity: 0.4; cursor: default; }
 
 @media (max-width: 640px) {
   .menu { padding: 0 16px 6vh 16px; }
-  .menu h1 { font-size: 42px; }
+  .menu h1 { font-size: 40px; gap: 10px; }
   .hud .obj { font-size: 11px; }
 }
 

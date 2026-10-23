@@ -122,6 +122,61 @@ function decalTexture(): THREE.CanvasTexture {
   return t;
 }
 
+/**
+ * Aftermarket LED speed readout on the dash, right of the steering wheel:
+ * big glowing digits that stay readable in any light.
+ */
+export class DashDisplay {
+  readonly mesh: THREE.Mesh;
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly texture: THREE.CanvasTexture;
+  private last = '';
+
+  constructor() {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 112;
+    this.ctx = c.getContext('2d')!;
+    this.texture = new THREE.CanvasTexture(c);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
+    // Unlit and a little over-bright so it glows through the sensor's tone curve.
+    const mat = new THREE.MeshBasicMaterial({ map: this.texture, color: new THREE.Color(1.6, 1.6, 1.6), toneMapped: false });
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.0875), mat);
+    this.mesh.name = 'DashDisplay';
+    this.update(0, 'P');
+  }
+
+  update(mph: number, gear: string): void {
+    const text = `${Math.round(mph)}|${gear}`;
+    if (text === this.last) return;
+    this.last = text;
+    const g = this.ctx;
+    g.fillStyle = '#04080a';
+    g.fillRect(0, 0, 256, 112);
+    g.strokeStyle = '#123038';
+    g.lineWidth = 4;
+    g.strokeRect(2, 2, 252, 108);
+    g.textBaseline = 'alphabetic';
+    // Unlit segments behind the digits, like a real LED readout.
+    g.font = 'bold 84px "IBM Plex Mono", ui-monospace, monospace';
+    g.textAlign = 'right';
+    g.fillStyle = '#0d2228';
+    g.fillText('888', 186, 92);
+    g.fillStyle = '#5ff2ff';
+    g.shadowColor = '#3ad8ff';
+    g.shadowBlur = 14;
+    g.fillText(String(Math.min(999, Math.round(mph))), 186, 92);
+    g.shadowBlur = 0;
+    g.textAlign = 'left';
+    g.font = 'bold 22px "IBM Plex Mono", ui-monospace, monospace';
+    g.fillStyle = '#5ff2ff';
+    g.fillText('MPH', 194, 52);
+    g.fillStyle = '#ffb347';
+    g.fillText(gear, 200, 92);
+    this.texture.needsUpdate = true;
+  }
+}
+
 export async function loadChaserModel(): Promise<VehicleParts> {
   const gltf = await new GLTFLoader().loadAsync(URL_GLB);
   const scene = gltf.scene;
@@ -359,6 +414,12 @@ export async function loadChaserModel(): Promise<VehicleParts> {
   const probes = [1, 2, 3, 4].map((i) => find(`Probe_${i}`)).filter((o): o is THREE.Object3D => !!o);
   const cargo = liftgate && rearEntry ? { liftgate, liftgateBase: liftgate.quaternion.clone(), rearEntry, probes } : undefined;
 
+  // LED speed readout on the dash, right of the wheel, angled at the driver.
+  const dashDisplay = new DashDisplay();
+  dashDisplay.mesh.position.copy(DRIVER_EYE).add(new THREE.Vector3(0.26, -0.285, -0.58));
+  dashDisplay.mesh.lookAt(DRIVER_EYE);
+  scene.add(dashDisplay.mesh);
+
   const interior: THREE.Object3D[] = [];
   scene.traverse((o) => {
     if ((o as THREE.Mesh).isMesh && o !== windshield) interior.push(o);
@@ -387,5 +448,6 @@ export async function loadChaserModel(): Promise<VehicleParts> {
     steeringBase: steeringWheel.quaternion.clone(),
     steeringAxis: new THREE.Vector3(0, 0, 1),
     cargo,
+    dashDisplay,
   };
 }

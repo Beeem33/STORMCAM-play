@@ -101,6 +101,12 @@ export class Game {
   private endReason = '';
   /** The truck was carried up by the vortex with the chaser inside. */
   private driverKilled = false;
+  /** Highest the truck has been off the ground in this flight, and where it left the ground. */
+  private truckPeak = 0;
+  private readonly liftoff = new THREE.Vector3();
+  private walkerPeak = 0;
+  private readonly walkerFrom = new THREE.Vector3();
+  private deathText: { title: string; sub: string } | null = null;
   private tornadoSeen = false;
   /** Seconds since the truck was last inside the tornado's core region. */
   private inVortexTime = 0;
@@ -216,7 +222,20 @@ export class Game {
       // Dents: landings show from ~7 m/s, crashes from ~5 m/s.
       this.truckDamage.add(local, (strength - (kind === 'ground' ? 7 : 5)) / 18);
       // Being carried by the vortex is survivable; being slammed down or into something isn't.
-      if (!this.onFoot && this.inVortexTime > 0 && (kind === 'ground' ? strength > 22 : strength > 18)) this.driverKilled = true;
+      if (!this.onFoot && !this.driverKilled && this.inVortexTime > 0 && (kind === 'ground' ? strength > 22 : strength > 18)) {
+        this.driverKilled = true;
+        const mph = Math.round(strength * 2.237);
+        const ft = Math.round(this.truckPeak * 3.281);
+        const away = Math.hypot(this.vehicle.pos.x - this.liftoff.x, this.vehicle.pos.z - this.liftoff.z);
+        this.deathText = {
+          title: 'SIGNAL LOST',
+          sub: ft > 30
+            ? `The tornado threw your truck ${ft} feet into the air. It came down ${farText(away)} away.`
+            : kind === 'collision'
+              ? `The tornado hurled your truck into an obstacle at ${mph} mph.`
+              : `The tornado slammed your truck into the ground at ${mph} mph.`,
+        };
+      }
       this.audio.impact(kind === 'collision' ? 'collision' : 'body', Math.min(1, strength / 15));
       this.shakeImpulse = Math.max(this.shakeImpulse, Math.min(1, strength / 12));
     };
@@ -254,6 +273,9 @@ export class Game {
     this.distanceDriven = 0;
     this.endTimer = -1;
     this.driverKilled = false;
+    this.truckPeak = 0;
+    this.walkerPeak = 0;
+    this.deathText = null;
     this.tornadoSeen = false;
     this.wreckToasted = false;
     this.calmToasted = false;
@@ -300,6 +322,34 @@ export class Game {
     this.setupDay();
     this.setupMenuScene();
     this.ui.showMenu();
+  }
+
+  /** How high the tornado has thrown the truck; coming down from that height is fatal. */
+  private trackTruckFlight(): void {
+    const v = this.vehicle;
+    const lift = v.pos.y - CG_HEIGHT - heightAt(v.pos.x, v.pos.z);
+    if (v.airborne > 0.25 && lift > 2.5) {
+      if (this.truckPeak === 0) this.liftoff.copy(v.pos);
+      this.truckPeak = Math.max(this.truckPeak, lift);
+    } else if (lift < 2.5 && this.truckPeak > 0) {
+      // Back on the ground, whichever way up.
+      if (this.truckPeak > 35 && !this.driverKilled) {
+        this.driverKilled = true;
+        const ft = Math.round(this.truckPeak * 3.281);
+        const away = Math.hypot(v.pos.x - this.liftoff.x, v.pos.z - this.liftoff.z);
+        this.deathText = { title: 'SIGNAL LOST', sub: `The tornado threw your truck ${ft} feet into the air. It came down ${farText(away)} away.` };
+      }
+      this.truckPeak = 0;
+    }
+  }
+
+  private showDeath(sub: string): void {
+    const s = DAY_START_SECONDS + this.dayTime;
+    const hh = String(Math.floor(s / 3600) % 24).padStart(2, '0');
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const ss = String(Math.floor(s % 60)).padStart(2, '0');
+    const cam = this.onFoot ? 'BODYCAM X3' : 'DASHCAM 01';
+    this.ui.showDeathCard('SIGNAL LOST', sub, `${cam}  ·  LAST FRAME ${hh}:${mm}:${ss}  ·  FOOTAGE RECOVERED`);
   }
 
   // ------------------------------------------------------------------ menu
@@ -514,6 +564,7 @@ export class Game {
       this.distanceDriven += Math.hypot(this.vehicle.pos.x - bx, this.vehicle.pos.z - bz);
     }
     if (this.state === 'menu') this.menuDrive(sdt);
+    else if (!this.onFoot) this.trackTruckFlight();
     this.vehicle.writeTransform(this.vehicleObj);
     this.updateVehicleVisuals(sdt);
 
@@ -528,6 +579,10 @@ export class Game {
       this.walker.car = { x: this.vehicle.pos.x, z: this.vehicle.pos.z, rot: -yawCar, hx: 1.0, hz: 2.55 };
       this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w);
       this.keepInChaseArea(this.walker.pos, this.walker.vel);
+      if (this.walker.caught) {
+        if (this.walkerPeak === 0 && this.walker.caughtTime < 0.1) this.walkerFrom.copy(this.walker.pos);
+        this.walkerPeak = Math.max(this.walkerPeak, this.walker.pos.y - heightAt(this.walker.pos.x, this.walker.pos.z), 0.001);
+      }
     }
     // The chaser's body: animated from his speed and the wind; the bodycam rides its chest mount.
     const speedOnFoot = Math.hypot(this.walker.vel.x, this.walker.vel.z);
@@ -670,15 +725,15 @@ export class Game {
       // Inside the vortex the flow carries the truck: it spins and drifts down
       // rather than dropping like a stone. Flung out, it falls freely.
       if (d < R * 1.6 && lift > 1.5 && v.vel.y < -10) v.vel.y = -10;
-      // Lifted to treetop height, it's swung around the core rather than carried higher.
-      if (lift > 18 && v.vel.y > 0) v.vel.y *= Math.max(0, 1 - dt * 6);
+      // Hundreds of feet is plenty: near the top of the ride it stops climbing.
+      if (lift > 140 && v.vel.y > 0) v.vel.y *= Math.max(0, 1 - dt * 3);
       v.damage(dt * 4 * severity * inner);
       v.windshieldCracks = Math.min(1, v.windshieldCracks + dt * 0.3 * inner * this.career.effects.glassDamage);
       this.shakeImpulse = Math.max(this.shakeImpulse, 0.4 + inner * 0.6);
       if (Math.random() < dt * 1.4 * severity * inner) {
         t.windAt(v.pos, _w);
-        // Once the truck is well up, the vortex spins and carries it rather than lifting it higher.
-        const up = lift > 20 ? 0 : 4 + Math.random() * 7 * severity;
+        // Deep in the core the updraft can carry the truck hundreds of feet up.
+        const up = lift > 150 ? 0 : inner > 0.5 ? (8 + Math.random() * 18) * severity : 4 + Math.random() * 7 * severity;
         const kick = new THREE.Vector3(_w.x * 0.22, up, _w.z * 0.22);
         const spin = new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 3).multiplyScalar(severity);
         v.applyImpulse(kick, spin);
@@ -789,12 +844,18 @@ export class Game {
     if (this.endTimer < 0) {
       // Only the chaser's death ends the day; a wrecked truck limps on.
       if (this.onFoot && this.walker.dead) {
-        this.endTimer = 4;
+        this.endTimer = 6;
         this.endReason = 'Caught in the tornado';
+        const ft = Math.round(this.walkerPeak * 3.281);
+        const away = Math.hypot(this.walker.pos.x - this.walkerFrom.x, this.walker.pos.z - this.walkerFrom.z);
+        this.showDeath(ft > 15
+          ? `The vortex carried you ${ft} feet into the air. Your bodycam was found ${farText(away)} from where you stood.`
+          : 'You were caught in the tornado. Your bodycam kept recording.');
       } else if (!this.onFoot && this.driverKilled) {
-        this.endTimer = 4;
+        this.endTimer = 6;
         this.endReason = 'Truck thrown by the tornado';
         this.audio.vehicleDestroyed();
+        this.showDeath(this.deathText?.sub ?? 'The tornado threw your truck. The dashcam kept rolling.');
       }
       if (this.vehicle.destroyed && !this.wreckToasted) {
         this.wreckToasted = true;
@@ -951,7 +1012,8 @@ export class Game {
     const view = { x: focus.x, z: focus.z, heading: this.onFoot ? -this.rig.yaw : v.heading };
     if (this.radarOpen) {
       const ctx = this.ui.radarCanvas.getContext('2d')!;
-      this.radar.draw(ctx, this.ui.radarCanvas.width, view, (s) => this.clock(s));
+      const tor = this.tornadoes.tornado;
+      this.radar.draw(ctx, this.ui.radarCanvas.width, view, (s) => this.clock(s), tor && tor.presence > 0.2 ? { x: tor.position.x, z: tor.position.z } : null);
       this.ui.setRadarCells(this.radar.scan?.storms.map((s) => ({ id: s.id, label: s.label })) ?? [], this.radar.targetId);
     }
     if (this.mapOpen) {
@@ -977,7 +1039,9 @@ export class Game {
     } else p.steeringWheel.rotation.z = -v.steerInput * 2.4;
     const mph = Math.abs(v.forwardSpeed) * MPS_TO_MPH;
     const hl = this.headlightsOn ? 1 : 0;
-    if (p.gauges) p.gauges.update(mph, v.rpm, hl > 0);
+    // Instruments are backlit whenever the engine runs.
+    p.dashDisplay?.update(mph, v.gearLabel);
+    if (p.gauges) p.gauges.update(mph, v.rpm, v.engineOn);
     else {
       p.speedNeedle.rotation.z = -(Math.PI * 0.75 + (Math.min(mph, 120) / 120) * Math.PI * 1.5) + Math.PI / 2;
       p.tachNeedle.rotation.z = -(Math.PI * 0.75 + (Math.min(v.rpm, 6000) / 6000) * Math.PI * 1.5) + Math.PI / 2;
@@ -990,8 +1054,8 @@ export class Game {
       // Invisible lights are left out of every shader; toggling recompiles once.
       s.visible = hl > 0;
     }
-    p.dashLight.visible = hl > 0;
-    p.dashLight.intensity = 0.6;
+    // No cabin flood light: it lit the whole dash blue whenever the headlights were on.
+    p.dashLight.visible = false;
     p.gaugeMat.emissiveIntensity = 0.06 + hl * 0.5;
     p.taillightMat.emissiveIntensity = 0.4 + (this.input.isDown('KeyS') && !this.onFoot ? 3 : 0) + hl;
     p.anemometer.rotation.y += dt * Math.min(40, this.windAtCam.length() * 1.6 + v.speed * 1.2);
@@ -1023,4 +1087,10 @@ function compassWord(dx: number, dz: number): string {
   const names = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
   const deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
   return names[Math.round(deg / 45) % 8];
+}
+
+/** A distance in feet under a quarter mile, otherwise in miles. */
+function farText(m: number): string {
+  const ft = m * 3.281;
+  return ft < 1300 ? `${Math.round(ft / 10) * 10} feet` : `${(m / 1609.34).toFixed(1)} miles`;
 }

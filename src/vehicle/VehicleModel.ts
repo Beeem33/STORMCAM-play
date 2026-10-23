@@ -128,6 +128,8 @@ export interface VehicleParts {
   /** Steering wheel rest orientation and column axis (local). */
   steeringBase?: THREE.Quaternion;
   steeringAxis?: THREE.Vector3;
+  /** LED speed readout on the dash (Blender model). */
+  dashDisplay?: { update(mph: number, gear: string): void };
   /** Liftgate, the sensor probes in the cargo area, and where to stand to reach them (Blender model). */
   cargo?: { liftgate: THREE.Object3D; liftgateBase: THREE.Quaternion; rearEntry: THREE.Object3D; probes: THREE.Object3D[] };
 }

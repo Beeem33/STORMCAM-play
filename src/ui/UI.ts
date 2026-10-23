@@ -129,6 +129,7 @@ export class UI {
 
   // ------------------------------------------------------------------ screens
   showMenu(): void {
+    this.hideDeathCard();
     this.closePanel();
     this.hud.classList.add('hidden');
     this.menu.classList.remove('hidden');
@@ -300,6 +301,7 @@ export class UI {
   }
 
   showReport(r: ReportData): void {
+    this.hideDeathCard();
     this.hud.classList.add('hidden');
     const rows = r.clips.length
       ? r.clips
@@ -376,6 +378,26 @@ export class UI {
     r.prompt.textContent = h.prompt;
     r.center.classList.toggle('hidden', !h.center);
     r.center.textContent = h.center;
+  }
+
+  private deathCardEl: HTMLElement | null = null;
+
+  /** Full-screen black card when the chaser dies: a title, a line about how, and a recorder stamp. */
+  showDeathCard(title: string, sub: string, osd: string): void {
+    this.hideDeathCard();
+    const d = el(`<div class="death-card"><div class="dc-title"></div><div class="dc-sub"></div><div class="dc-osd"></div></div>`);
+    (d.querySelector('.dc-title') as HTMLElement).textContent = title;
+    (d.querySelector('.dc-sub') as HTMLElement).textContent = sub;
+    (d.querySelector('.dc-osd') as HTMLElement).textContent = osd;
+    this.root.appendChild(d);
+    this.deathCardEl = d;
+    requestAnimationFrame(() => d.classList.add('on'));
+    setTimeout(() => d.classList.add('on'), 50);
+  }
+
+  hideDeathCard(): void {
+    this.deathCardEl?.remove();
+    this.deathCardEl = null;
   }
 
   toast(text: string, kind: 'info' | 'money' | 'alert' = 'info', ms = 4000): void {

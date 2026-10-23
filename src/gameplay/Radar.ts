@@ -108,7 +108,13 @@ export class Radar {
    * Draw the radar into a canvas. `view` = current player pose (live GPS),
    * the precipitation itself is from the last scan.
    */
-  draw(ctx: CanvasRenderingContext2D, size: number, view: { x: number; z: number; heading: number }, clockLabel: (t: number) => string): void {
+  draw(
+    ctx: CanvasRenderingContext2D,
+    size: number,
+    view: { x: number; z: number; heading: number },
+    clockLabel: (t: number) => string,
+    tornado: { x: number; z: number } | null = null,
+  ): void {
     const s = this.scan;
     ctx.fillStyle = '#0d1114';
     ctx.fillRect(0, 0, size, size);
@@ -241,6 +247,44 @@ export class Radar {
       ctx.arc(size / 2, size / 2, r * MILE * scale, 0, Math.PI * 2);
       ctx.stroke();
     }
+    // Tornado (live): a red dot with spinning arms and a pulsing ring.
+    if (tornado) {
+      const [tx, tz] = toPx(tornado.x, tornado.z);
+      const now = performance.now() / 1000;
+      ctx.save();
+      ctx.translate(tx, tz);
+      const pulse = (now * 0.8) % 1;
+      ctx.strokeStyle = `rgba(255,60,50,${(1 - pulse) * 0.8})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8 + pulse * 22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.rotate(-now * 3.2);
+      ctx.lineCap = 'round';
+      for (let k = 0; k < 3; k++) {
+        ctx.rotate((Math.PI * 2) / 3);
+        ctx.strokeStyle = 'rgba(255,80,60,0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let s = 0; s <= 12; s++) {
+          const a = s * 0.13;
+          const r = 6 + s * 1.1;
+          const px = Math.cos(a) * r, py = Math.sin(a) * r;
+          if (s === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ff2a20';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Player (live GPS).
     ctx.save();
     ctx.translate(size / 2, size / 2);

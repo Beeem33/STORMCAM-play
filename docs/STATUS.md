@@ -68,7 +68,10 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 - **Ending a day:** only the chaser's death ends it: caught on foot, or, in
   the truck, a violent impact while caught by the tornado (slammed down at
   over 22 m/s or into an object at over 18 m/s within 4 s of being in the
-  core). Landings and collisions count once per impact (not per contact
+  core). Inside the core the tornado can carry the truck up to ~140 m
+  (hundreds of feet); coming back down from above ~35 m is fatal, and a
+  black "SIGNAL LOST" card says how high and how far it was thrown before
+  the report. Landings and collisions count once per impact (not per contact
   point), so jumps and rollovers do modest damage. Being sucked up is survivable: inside the vortex the truck is
   carried no higher than about 20 m and drifts down at most 10 m/s. A rolled truck is rocked back
   onto its wheels after 3 s; at 0% health it's wrecked but keeps about 70%
@@ -77,10 +80,14 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 - **Wind:** tree crowns lean downwind, pump with the gusts and flutter
   (stronger near the tornado); above ~13 mph leaves, straw, grass and twigs
   start streaming past the camera, up to 900 pieces at ~80 mph.
+- **Interior:** the gauges are backlit while the engine runs, and an LED
+  speed readout sits on the dash right of the wheel. Headlights light only
+  the road (the old cabin flood light is gone).
 - **HUD:** deliberately bare: REC and clip time, speed, one red arrow
   pointing at the tornado (or the storm before it forms) with its distance,
   and the probe count. The radar draws a bold arrow on each storm showing
-  where it will be in 20 minutes (red once it's tornadic).
+  where it will be in 20 minutes (red once it's tornadic), and the live
+  tornado as a red dot with spinning arms and a pulsing ring.
 - **Tornado chaos:** a dark, dense condensation funnel (about 60% of the
   damaging-wind width, flaring into the wall cloud) that reaches the ground,
   sways along its length and wanders up to ~6 m/s on top of the storm's
