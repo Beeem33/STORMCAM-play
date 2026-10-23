@@ -117,6 +117,49 @@ export function buildWindmill(rng: RNG): PropBuild {
   return finish(g, -b0 - 0.25, tx + tankR + 0.05, -Math.max(b0, tankR - tz) - 0.25, Math.max(b0, tz + tankR) + 0.25);
 }
 
+// ============================================================ WIND TURBINE
+
+/**
+ * Utility-scale wind turbine: ~80 m tubular tower, nacelle and three ~42 m
+ * blades. Child 'Head' (the nacelle) yaws about Y; its child 'Rotor' spins
+ * about local Z (= the main shaft, facing +Z), like the windmill's.
+ */
+export function buildWindTurbine(rng: RNG): PropBuild {
+  const g = new THREE.Group();
+  g.name = 'wind-turbine';
+  const H = rand(rng, 78, 86);
+  const white = M.paint('#e6e8e5', 0.55);
+  addPart(g, 'tower', [xf(cyl(1.4, 2.25, H, 22), 0, H / 2, 0)], white);
+  addPart(g, 'foundation', [xf(cyl(4.2, 4.6, 0.7, 18), 0, 0.05, 0)], M.concrete());
+  addPart(g, 'door', [xf(box(1.0, 2.2, 0.12), 0, 1.4, 2.2)], M.galv('#8c9090'));
+  const head = new THREE.Group();
+  head.name = 'Head';
+  head.position.set(0, H, 0);
+  head.rotation.y = rand(rng, -0.4, 0.4);
+  addPart(head as unknown as THREE.Group, 'nacelle', [xf(box(3.5, 3.7, 11.5), 0, 1.7, -2.6), xf(box(3.0, 0.5, 9), 0, 3.75, -3.2)], white);
+  const rotor = new THREE.Group();
+  rotor.name = 'Rotor';
+  rotor.position.set(0, 1.9, 3.5);
+  rotor.rotation.z = rand(rng, 0, Math.PI * 2);
+  // Hub and spinner, nose forward along +Z.
+  const hub = [xf(cyl(0.25, 1.7, 3.4, 18), 0, 0, 1.0, 0, Math.PI / 2)];
+  const blades: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 3; k++) {
+    // Tapered, flat, a little pitch twist.
+    const b = cyl(0.28, 1.25, 42, 6);
+    b.scale(1, 1, 0.26);
+    b.translate(0, 22.5, 0);
+    b.rotateY(0.18);
+    b.rotateZ((k / 3) * Math.PI * 2);
+    blades.push(b);
+  }
+  addPart(rotor as unknown as THREE.Group, 'hub', hub, white);
+  addPart(rotor as unknown as THREE.Group, 'blades', blades, white);
+  head.add(rotor);
+  g.add(head);
+  return finish(g, -2.4, 2.4, -2.4, 2.4);
+}
+
 // ============================================================ PUMPJACK
 
 interface PumpjackData { R: number; Lp: number; eY: number; eZ: number; rc: number; rodY: number }

@@ -706,16 +706,18 @@ export class Game {
     const repairs = Math.round((100 - this.vehicle.health) * 55 + (this.vehicle.destroyed ? 4500 : 0) + this.vehicle.windshieldCracks * 900);
     const fuel = Math.round(95 + (this.distanceDriven / 1609) * 0.32);
     const probes = this.probes.report();
-    const net = footage + probes.value - probes.lost - repairs - fuel;
+    // Dead: the footage, the truck and the savings all go with him. Everything, but never into debt.
+    const died = (this.onFoot && this.walker.dead) || this.driverKilled;
+    const net = died ? -Math.max(0, c.money) : footage + probes.value - probes.lost - repairs - fuel;
     c.money += net;
-    c.totalEarned += footage + probes.value;
+    if (!died) c.totalEarned += footage + probes.value;
     c.bestClip = Math.max(c.bestClip, ...this.recorder.clips.map((cl) => cl.value), 0);
     if (this.recorder.clips.some((cl) => cl.tornadoSeconds > 3)) c.tornadoesFilmed++;
     const day = c.day;
     c.day++;
     this.career.save();
     this.ui.closePanel(false);
-    this.ui.showReport({ clips: [...this.recorder.clips], footage, probes, repairs, fuel, net, balance: c.money, day, outcome });
+    this.ui.showReport({ clips: [...this.recorder.clips], footage, probes, repairs, fuel, net, balance: c.money, day, outcome: died ? `${outcome} · You lost everything` : outcome });
   }
 
   private selectTarget(id: number): void {
@@ -1261,14 +1263,12 @@ export class Game {
     a.windSpeed = this.windAtCam.length();
     const tor = this.tornadoes.tornado;
     a.tornado.active = !!tor;
-    a.siren = 0;
     // Screaming from the moment he's torn loose until it's over.
     a.screaming = this.state === 'playing' && this.onFoot && (this.walker.caught || this.ejection !== null || this.hold.scream > 0) && !this.walker.dead ? 1 : 0;
     if (tor) {
       a.tornado.position.copy(tor.position);
       a.tornado.distance = tor.distanceTo(cam.position);
       a.tornado.intensity = tor.intensity01;
-      a.siren = Math.min(1, tor.presence * 1.5);
       a.tornado.radius = tor.radius;
     }
     this.audio.update(a);

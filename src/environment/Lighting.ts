@@ -37,11 +37,12 @@ export class Lighting {
    */
   update(camPos: THREE.Vector3, cover: number, sunBlocked: number, precip: number, flash: number): void {
     const dark = Math.min(1, cover * 0.75 + precip * 0.35);
-    const ambient = 1.25 * (1 - dark * 0.82);
+    // Sky fill: what lights the shaded sides (there are no shadow maps), so this sets how dark shadows read.
+    const ambient = 1.5 * (1 - dark * 0.8);
     // Lightning lights the scene through the ambient term (one light fewer in every shader).
     this.hemi.intensity = ambient + flash * 0.9;
     this.hemi.color.setRGB(0.66 - dark * 0.12, 0.72 - dark * 0.08, 0.76 - dark * 0.04);
-    this.hemi.groundColor.setRGB(0.28, 0.26, 0.2).multiplyScalar(1 - dark * 0.5);
+    this.hemi.groundColor.setRGB(0.36, 0.33, 0.26).multiplyScalar(1 - dark * 0.5);
     this.sun.intensity = 2.6 * (1 - sunBlocked) * (1 - precip * 0.8);
     this.sun.position.copy(camPos).addScaledVector(this.sunDir, 1000);
     this.sun.target.position.copy(camPos);

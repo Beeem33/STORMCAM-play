@@ -15,6 +15,7 @@ import {
   buildStockTank,
   buildWaterTower,
   buildWindmill,
+  buildWindTurbine,
   posePumpjack,
   buildMachineShed,
   buildMailbox,
@@ -644,6 +645,7 @@ export class WorldProps {
     for (const fs of this.farmsteads.values()) fs.group.visible = Math.hypot(fs.center.x - cam.x, fs.center.y - cam.z) < 2800;
   }
   private readonly windmills: THREE.Object3D[] = [];
+  private readonly turbines: THREE.Object3D[] = [];
   private readonly pumpjacks: { group: THREE.Group; phase: number; speed: number }[] = [];
   private readonly pivots: { group: THREE.Group; speed: number }[] = [];
   private animTime = 0;
@@ -707,8 +709,21 @@ export class WorldProps {
     town(78, 38, buildFarmhouse(rng), -Math.PI / 2, 'House destroyed', 62, 10);
     town(-80, -38, buildFarmhouse(rng), Math.PI / 2, 'House destroyed', 62, 10);
 
+    // Wind farms: a row of turbines across the north of the chase area, and
+    // another out past the southern edge. Too big to wreck: they ride it out.
+    for (const [rowZ, x0, x1] of [[-1030, -1350, 1350], [MILE + 420, -2400, 2400]] as const) {
+      for (let x = x0; x <= x1; x += 390) {
+        const px = x + r(-40, 40), pz = rowZ + r(-60, 60);
+        if (roadDistance(px, pz) < 30 || Math.hypot(px - tx, pz - tz) < 260) continue;
+        if (taken.some(([qx, qz, qr]) => Math.hypot(px - qx, pz - qz) < qr + 10)) continue;
+        taken.push([px, pz, 10]);
+        const b = this.addFeature(buildWindTurbine(rng), px, pz, r(0, Math.PI * 2), 'Wind turbine', 999, true);
+        this.turbines.push(b.obj);
+      }
+    }
+
     // Windmills and stock tanks in pastures.
-    for (let n = 0; n < 9; n++) {
+    for (let n = 0; n < 16; n++) {
       const p = spot(8, 60, (x, z) => fieldTypeAt(x, z) === 1 || fieldTypeAt(x, z) === 4);
       if (!p) continue;
       const b = this.addFeature(buildWindmill(rng), p[0], p[1], r(0, Math.PI * 2), 'Windmill wrecked', 46, true);
@@ -783,6 +798,13 @@ export class WorldProps {
       // Face into the wind: the wheel's axle (+Z) points upwind.
       if (head) head.rotation.y = damp(head.rotation.y, windYaw + Math.PI - w.rotation.y, 0.5, dt);
       if (rotor) rotor.rotation.z += dt * Math.min(9, ws * 0.45);
+    }
+    for (const w of this.turbines) {
+      const head = w.getObjectByName('Head');
+      const rotor = w.getObjectByName('Rotor');
+      if (head) head.rotation.y = damp(head.rotation.y, windYaw + Math.PI - w.rotation.y, 0.15, dt);
+      // Big rotors turn slowly: ~15 rpm at most.
+      if (rotor) rotor.rotation.z += dt * Math.min(1.6, 0.2 + ws * 0.11);
     }
     for (const p of this.pumpjacks) {
       if (!p.group.parent || p.group.position.distanceToSquared(cam) > 2500 * 2500) continue;

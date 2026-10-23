@@ -20,7 +20,6 @@ import { PrecipLayer } from './layers/Precip';
 import { TornadoLayer } from './layers/Tornado';
 import { TyreLayer } from './layers/Tyres';
 import { WindLayer } from './layers/Wind';
-import { SirenLayer } from './layers/Siren';
 import { ScreamLayer } from './layers/Scream';
 import { OneShots } from './OneShots';
 import { getSoundBank } from './SoundBank';
@@ -44,7 +43,6 @@ interface Graph {
   engine: EngineLayer;
   tyres: TyreLayer;
   cabin: CabinLayer;
-  siren: SirenLayer;
   scream: ScreamLayer;
   shots: OneShots;
   extLP: Smoothed;
@@ -204,7 +202,6 @@ export class AudioSystem {
     g.wind.update(s, dt);
     g.precip.update(s, dt);
     g.tornado.update(s, dt);
-    g.siren.update(s, dt);
     g.scream.update(s, dt);
     g.engine.update(s);
     g.tyres.update(s, dt);
@@ -376,7 +373,6 @@ export class AudioSystem {
       engine: new EngineLayer(core),
       tyres: new TyreLayer(core),
       cabin: new CabinLayer(core),
-      siren: new SirenLayer(core),
       scream: new ScreamLayer(core),
       shots,
       extLP: new Smoothed(ctx, extLP.frequency, 850, 0.08, 0.01, 5),

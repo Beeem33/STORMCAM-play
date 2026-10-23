@@ -20,6 +20,8 @@ What exists in the code today, and what doesn't. Updated with each milestone.
     foliage shading.
   - The crossroads town of Cedar Flats: grain elevator, water tower, church,
     houses.
+  - Two rows of ~80 m wind turbines (one across the north of the chase
+    area, one past the southern edge) that yaw into the wind and turn.
   - Windmills that turn with the wind, nodding oil pumpjacks, rotating
     center-pivot sprinklers.
   - Billboards, hay stacks, abandoned trucks, stock tanks, round bales.
@@ -55,8 +57,7 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   shaggy verges along the roads), flattened under the truck.
 - **Storm menace:** near a tornado the image darkens and shifts to a sickly
   green-grey with a tighter vignette; tornadic storms flash and strike about
-  2.6x more often; outdoor warning sirens wail in the distance while a
-  tornado is down.
+  2.6x more often.
 - **Sensor probes:** four orange "turtle" probes ride in a tote in the cargo
   area. On foot, E at the back of the truck opens the liftgate and takes a
   probe; the chaser carries it in both hands (no sprinting) and E sets it
@@ -209,7 +210,8 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 - **Gameplay:** recording (Q) with live quality grading and an explanation
   of what's wrong with the shot, event bonuses, and diminishing returns.
   The end-of-day report sells the footage and subtracts repairs and fuel.
-  Money, days and owned equipment persist.
+  Money, days and owned equipment persist. Dying (on foot or in the truck)
+  loses all your money, but never puts you in debt.
 - **Radar:** stale reflectivity scans with hook echoes, storm tracks, a
   warning polygon, and target selection.
 - **On foot:** get out (F), walk or run, wind pushes you, and you can be
