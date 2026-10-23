@@ -4,7 +4,7 @@ import { CG_HEIGHT, DASHCAM_POS, DRIVER_EYE } from '../vehicle/VehicleModel';
 import type { Vehicle } from '../vehicle/Vehicle';
 import { clamp, damp, wrapAngle } from '../utils/MathUtils';
 
-export type CameraMode = 'driver' | 'dashcam' | 'bodycam';
+export type CameraMode = 'driver' | 'dashcam' | 'bodycam' | 'drone';
 
 /** Smooth pseudo-random signal from a few incommensurate sines. */
 class Wobble {
@@ -29,6 +29,11 @@ export const LENSES: Record<CameraMode, LensProfile> = {
   dashcam: {
     barrel: 0.34, chroma: 0.014, noise: 1.6, sharpen: 0.6, vignette: 0.45,
     saturation: 0.84, contrast: 1.14, tint: new THREE.Color(0.985, 1.0, 0.97), ev: 0.8, shutter: 0.3,
+  },
+  // Stabilised drone gimbal for the menu: clean, gentle, filmic.
+  drone: {
+    barrel: 0.03, chroma: 0.002, noise: 0.5, sharpen: 0.3, vignette: 0.3,
+    saturation: 0.92, contrast: 1.12, tint: new THREE.Color(0.98, 1.0, 1.0), ev: 0.85, shutter: 0.5,
   },
   // Chest-mounted body camera: very wide, fisheye-ish, crunchy sensor.
   bodycam: {
@@ -111,6 +116,8 @@ export class CameraRig {
 
   update(c: RigContext): void {
     const cam = this.camera;
+    // The menu flies the drone itself.
+    if (this.mode === 'drone') return;
     const sens = 0.0022 * c.sensitivity / Math.max(1, this.zoom * 0.8);
     if (this.mode !== 'dashcam') {
       this.yaw -= c.mouseDX * sens;

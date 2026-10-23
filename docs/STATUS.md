@@ -24,6 +24,10 @@ What exists in the code today, and what doesn't. Updated with each milestone.
     center-pivot sprinklers.
   - Billboards, hay stacks, abandoned trucks, stock tanks, round bales.
   - Telephone poles with sagging wires, barbed-wire fences, road signs.
+- **Main menu:** a drone shot. A mature EF3 is staged near the middle of the
+  map and a chase truck circles it with its lights on, while a stabilised
+  drone camera hangs ~85 m up beside the truck, slowly swinging around it,
+  with the tornado looming behind (framed right of the menu).
 - **Objectives:** one line under the tornado arrow always says what to do
   next: head for the storm, get ahead of the tornado, grab a probe, set it
   down, program it, then film and survive, then cash in.

@@ -182,6 +182,7 @@ export class Game {
     });
 
     this.setupDay();
+    this.setupMenuScene();
     window.addEventListener('resize', () => this.resize());
     this.resize();
     this.renderer.updateEnvironment(this.scene, this.rig.camera.position, true);
@@ -268,6 +269,7 @@ export class Game {
   beginChase(): void {
     this.audio.unlock();
     this.ui.closePanel(false);
+    this.headlightsOn = false;
     this.setupDay();
     this.state = 'playing';
     this.ui.showHud();
@@ -296,7 +298,94 @@ export class Game {
     this.state = 'menu';
     this.input.releaseLock();
     this.setupDay();
+    this.setupMenuScene();
     this.ui.showMenu();
+  }
+
+  // ------------------------------------------------------------------ menu
+  /**
+   * Title screen: a drone shot of a chase truck circling a mature tornado.
+   * The storm is held in place and the tornado kept mature; the truck drives
+   * a loop around it (placed directly, no physics) with its lights on.
+   */
+  private setupMenuScene(): void {
+    const s = this.weather.storms.find((c) => c.tornadic) ?? this.weather.storms[0];
+    if (!s) return;
+    const target = new THREE.Vector3(250, 0, -350);
+    s.vx = 0;
+    s.vz = 0;
+    s.intensity = 1;
+    s.meso = 1;
+    s.stage = 'tornadic';
+    s.hasTornado = true;
+    this.tornadoes.clear();
+    const tor = this.tornadoes.spawn(s, { rating: 3, visibility: 0.95 });
+    // Shift the storm so its tornado lands on open ground near the middle of the map.
+    s.x += target.x - tor.position.x;
+    s.z += target.z - tor.position.z;
+    tor.phase = 'mature';
+    tor.phaseTime = 0;
+    tor.presence = 1;
+    tor.debris = 1;
+    tor.condensation = 1;
+    tor.radius = tor.params.coreRadius;
+    for (const o of this.weather.storms) if (o !== s) o.x += 40000;
+    this.menuOrbit = Math.random() * Math.PI * 2;
+    this.menuDroneAngle = this.menuOrbit + 2.2;
+    this.headlightsOn = true;
+    this.rig.setMode('drone');
+  }
+
+  private menuOrbit = 0;
+  private menuDroneAngle = 0;
+  private readonly menuCenter = new THREE.Vector3();
+
+  /** The truck's loop around the tornado. */
+  private menuDrive(dt: number): void {
+    const t = this.tornadoes.tornado;
+    if (!t) return;
+    t.phaseTime = 0; // stays mature for as long as the menu is up
+    const R = t.radius * 2.6 + 260;
+    const speed = 16;
+    this.menuOrbit += (dt * speed) / R;
+    const a = this.menuOrbit;
+    const x = t.position.x + Math.cos(a) * R;
+    const z = t.position.z + Math.sin(a) * R;
+    // Heading along the loop (counter-clockwise seen from above).
+    const hx = -Math.sin(a), hz = Math.cos(a);
+    this.vehicle.placeAt(x, z, Math.atan2(hx, -hz));
+    this.vehicle.vel.set(hx * speed, 0, hz * speed);
+    for (const w of this.vehicle.wheels) w.spinAngle += (speed / 0.445) * dt;
+  }
+
+  /**
+   * The chase drone: hanging high outside the truck's loop and slowly swinging
+   * around it, looking past the truck at the tornado — truck in the
+   * foreground, the funnel looming behind it.
+   */
+  private menuDrone(dt: number): void {
+    const t = this.tornadoes.tornado;
+    const cam = this.rig.camera;
+    const truck = this.vehicle.pos;
+    const tp = t ? t.position : _w.copy(truck).add(_v.set(600, 0, 0));
+    // Outward from the tornado through the truck, swung slowly side to side.
+    this.menuDroneAngle += dt * 0.12;
+    const out = Math.atan2(truck.z - tp.z, truck.x - tp.x) + Math.sin(this.menuDroneAngle * 0.35) * 0.45;
+    const dist = 200, alt = 85 + Math.sin(this.time * 0.11) * 10;
+    const target = _v.set(truck.x + Math.cos(out) * dist, 0, truck.z + Math.sin(out) * dist);
+    target.y = Math.max(heightAt(target.x, target.z) + 40, truck.y + alt);
+    if (this.menuCenter.lengthSq() === 0) this.menuCenter.copy(target);
+    this.menuCenter.lerp(target, 1 - Math.exp(-dt * 1.5));
+    cam.position.copy(this.menuCenter);
+    cam.up.set(0, 1, 0);
+    const look = _w.copy(truck).lerp(tp, 0.08);
+    cam.lookAt(look.x, look.y + 45, look.z);
+    // Frame the action right of centre, clear of the menu, with a touch of gimbal drift.
+    cam.rotateY(0.3);
+    cam.rotateZ(Math.sin(this.time * 0.07) * 0.015);
+    cam.fov = 55;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
   }
 
   endChase(outcome: string): void {
@@ -424,6 +513,7 @@ export class Game {
       this.keepInChaseArea(this.vehicle.pos, this.vehicle.vel);
       this.distanceDriven += Math.hypot(this.vehicle.pos.x - bx, this.vehicle.pos.z - bz);
     }
+    if (this.state === 'menu') this.menuDrive(sdt);
     this.vehicle.writeTransform(this.vehicleObj);
     this.updateVehicleVisuals(sdt);
 
@@ -452,12 +542,7 @@ export class Game {
 
     // --- Camera.
     this.shakeImpulse = Math.max(0, this.shakeImpulse - dt * 2.5);
-    if (this.state === 'menu') {
-      // Slow look around from the driver's seat toward the storms.
-      this.menuYaw += dt * 0.025;
-      this.rig.yaw = -0.3 + Math.sin(this.menuYaw) * 0.15;
-      this.rig.pitch = 0.06;
-    }
+
     const shake = this.settings.data.cameraShake * (this.onFoot ? eff.handheldShake : 1);
     this.rig.update({
       dt, time: this.time, vehicleObj: this.vehicleObj, vehicle: this.vehicle,
@@ -475,6 +560,7 @@ export class Game {
       bodycamFov: this.settings.data.bodycamFov,
     });
     const cam = this.rig.camera;
+    if (this.state === 'menu') this.menuDrone(dt);
     // Head torch rides just above the lens and points where the chaser looks.
     const lamp = this.onFoot && this.headlampOn && !this.walker.dead;
     this.headlamp.visible = lamp;
