@@ -9,7 +9,7 @@ footage that's actually usable, not just for driving close.
 
 > **Prototype.** The first playable milestone is in place: one rural map, one
 > drivable SUV, driver and dashcam cameras, rain, lightning, one volumetric
-> tornado, recording and scoring, radar and GPS, and menus. See
+> tornado, recording and scoring, radar, and menus. See
 > [`docs/STATUS.md`](docs/STATUS.md) for what is done and what isn't.
 
 ## Run it
@@ -46,11 +46,10 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | F | Get out of / back into the vehicle |
 | E | At the liftgate: open it, take or return a probe. On foot: set a probe down, program it (type the answers on the keypad), or pick it up |
 | R | Weather radar (1–4 picks a target cell) |
-| M | GPS map with route to the target |
 | X | Wipers: auto / off / low / high |
 | L | Headlights (in the truck) / head torch (on foot) |
 | T | Dashcam timestamp overlay |
-| Right mouse | Zoom (bodycam) |
+| Right mouse (hold) | Zoom (bodycam) |
 | Shift | Run (on foot) |
 | Esc | Pause |
 
@@ -82,7 +81,7 @@ src/
   tornado/      Tornado life cycle and wind field, volume renderer, debris
   camera/       Driver / dashcam / handheld rigs and lens profiles
   player/       On-foot movement
-  gameplay/     Footage recorder and scoring, radar, GPS, career, upgrades
+  gameplay/     Footage recorder and scoring, radar, career, upgrades
   audio/        Procedural Web Audio (wind, rain, hail, thunder, tornado, engine, tyres)
   ui/           Menus, HUD, report, garage
   dev/          Console dev tools, audio test page

@@ -139,7 +139,14 @@ export class Renderer {
       depthWrite: false,
     });
     this.lumaMat = new THREE.ShaderMaterial({
-      uniforms: { tScene: { value: this.sceneRT.texture }, tGlass: { value: this.glassRT.texture }, uSrcTexel: { value: new THREE.Vector2() } },
+      uniforms: {
+        tScene: { value: this.sceneRT.texture },
+        tDepth: { value: this.sceneRT.depthTexture },
+        tGlass: { value: this.glassRT.texture },
+        uSrcTexel: { value: new THREE.Vector2() },
+        uNear: { value: 0.1 },
+        uFar: { value: 1000 },
+      },
       vertexShader: POST_VERTEX,
       fragmentShader: LUMA_FRAGMENT,
       depthTest: false,
@@ -249,6 +256,8 @@ export class Renderer {
     // 4. Exposure measurement (async readback every few frames).
     if (this.frame % 4 === 0 && !this.lumaPending) {
       this.fsQuad.material = this.lumaMat;
+      this.lumaMat.uniforms.uNear.value = camera.near;
+      this.lumaMat.uniforms.uFar.value = camera.far;
       gl.setRenderTarget(this.lumaRT);
       gl.render(this.fsScene, this.fsCam);
       this.lumaPending = true;

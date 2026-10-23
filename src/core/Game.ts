@@ -29,7 +29,6 @@ import { TornadoSystem } from '../tornado/TornadoSystem';
 import { FootageRecorder } from '../gameplay/FootageRecorder';
 import { Career } from '../gameplay/Career';
 import { Radar } from '../gameplay/Radar';
-import { compass, drawMap, gridRoute, routeLength } from '../gameplay/Navigation';
 import { AudioSystem } from '../audio/AudioSystem';
 import type { AudioFrameState } from '../audio/AudioTypes';
 import { UI, type HudState } from '../ui/UI';
@@ -98,7 +97,6 @@ export class Game {
   headlampOn = false;
   private readonly headlamp = new THREE.SpotLight('#fff1dc', 0, 70, 0.38, 0.55, 1.4);
   private radarOpen = false;
-  private mapOpen = false;
   private last = performance.now();
   running = true;
   /** Wind at the camera (m/s) — total of storm + tornado. */
@@ -207,7 +205,7 @@ export class Game {
     });
     window.addEventListener('keydown', () => this.audio.unlock());
     document.addEventListener('pointerlockchange', () => {
-      if (!document.pointerLockElement && this.state === 'playing' && !this.radarOpen && !this.mapOpen) this.pause();
+      if (!document.pointerLockElement && this.state === 'playing' && !this.radarOpen) this.pause();
     });
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape') {
@@ -820,8 +818,8 @@ export class Game {
             tumble: this.walker.caught ? this.walker.tumble : null,
           }
         : null,
-      mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0, wheel: 0,
-      zoomHeld: inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
+      mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0,
+      zoomHeld: playing && inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
       shake: this.onFoot && eff.tripod && this.walker.stillTime > 1.5 ? shake * 0.1 : shake,
       fov: this.settings.data.fov, wind: this.windAtCam.length(), impulse: this.shakeImpulse,
       bodycamFov: this.settings.data.bodycamFov,
@@ -1021,12 +1019,7 @@ export class Game {
     if (inp.wasPressed('KeyT')) this.settings.set('timestamp', !this.settings.data.timestamp);
     if (inp.wasPressed('KeyR')) {
       this.radarOpen = !this.radarOpen;
-      this.mapOpen = false;
       if (this.radarOpen && !this.radar.scan) this.radar.forceScan();
-    }
-    if (inp.wasPressed('KeyM')) {
-      this.mapOpen = !this.mapOpen;
-      this.radarOpen = false;
     }
     if (this.radarOpen && this.radar.scan) {
       ['Digit1', 'Digit2', 'Digit3', 'Digit4'].forEach((code, k) => {
@@ -1250,18 +1243,12 @@ export class Game {
 
     // Devices.
     this.ui.radarDevice.classList.toggle('hidden', !this.radarOpen);
-    this.ui.mapDevice.classList.toggle('hidden', !this.mapOpen);
     const view = { x: focus.x, z: focus.z, heading: this.onFoot ? -this.rig.yaw : v.heading };
     if (this.radarOpen) {
       const ctx = this.ui.radarCanvas.getContext('2d')!;
       const tor = this.tornadoes.tornado;
       this.radar.draw(ctx, this.ui.radarCanvas.width, view, (s) => this.clock(s), tor && tor.presence > 0.2 ? { x: tor.position.x, z: tor.position.z } : null);
       this.ui.setRadarCells(this.radar.scan?.storms.map((s) => ({ id: s.id, label: s.label })) ?? [], this.radar.targetId);
-    }
-    if (this.mapOpen) {
-      const ctx = this.ui.mapCanvas.getContext('2d')!;
-      const tg = this.radar.target();
-      drawMap(ctx, this.ui.mapCanvas.width, view, tg ? { x: tg.x, z: tg.z, label: tg.label } : null);
     }
   }
 

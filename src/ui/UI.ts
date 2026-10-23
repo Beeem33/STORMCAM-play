@@ -58,7 +58,7 @@ export interface ReportData {
 }
 
 /**
- * All HTML UI: menus, HUD, radar/GPS devices, report and garage. The HUD is
+ * All HTML UI: menus, HUD, radar device, report and garage. The HUD is
  * deliberately sparse — a camera's REC readout, a small speed readout and a
  * line of chase info — so the screen stays mostly footage.
  */
@@ -69,8 +69,6 @@ export class UI {
   private panelWrap: HTMLElement | null = null;
   readonly radarDevice: HTMLElement;
   readonly radarCanvas: HTMLCanvasElement;
-  readonly mapDevice: HTMLElement;
-  readonly mapCanvas: HTMLCanvasElement;
   private readonly toasts: HTMLElement;
   private readonly refs: Record<string, HTMLElement> = {};
   onPanelClose: (() => void) | null = null;
@@ -121,10 +119,8 @@ export class UI {
 
     this.radarDevice = el(`<div class="device hidden"><div class="title"><span>RADAR · KICT</span><span>R to close</span></div><canvas width="520" height="520"></canvas><div class="cells"></div></div>`);
     this.radarCanvas = this.radarDevice.querySelector('canvas')!;
-    this.mapDevice = el(`<div class="device hidden"><div class="title"><span>GPS</span><span>M to close</span></div><canvas width="520" height="520"></canvas></div>`);
-    this.mapCanvas = this.mapDevice.querySelector('canvas')!;
 
-    root.append(this.hud, this.radarDevice, this.mapDevice, this.menu);
+    root.append(this.hud, this.radarDevice, this.menu);
   }
 
   // ------------------------------------------------------------------ screens
@@ -261,8 +257,8 @@ export class UI {
     const keys: [string, string][] = [
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
       ['1 / 2 / 3, wheel', 'Camera / radar tablet / flashlight (again to put away)'], ['Left click', 'Use the item: film, flashlight'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / program / pick up probes'], ['L', 'Headlights / head torch on foot'],
-      ['R', 'Weather radar'], ['M', 'GPS map'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
-      ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Wheel / RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
+      ['R', 'Weather radar'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
+      ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Hold RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
     ];
     const p = this.openPanel(el(`<div class="panel"><h2>Controls</h2><div class="keys">${keys
       .map(([k, d]) => `<span class="k">${k}</span><span>${d}</span>`)

@@ -202,8 +202,6 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   Money, days and owned equipment persist.
 - **Radar:** stale reflectivity scans with hook echoes, storm tracks, a
   warning polygon, and target selection.
-- **GPS:** a road map with a grid route to the target, plus distance and
-  bearing in the HUD.
 - **On foot:** get out (F), walk or run, wind pushes you, and you can be
   killed in the core.
 - **Audio:** fully procedural, with inside/outside muffling and spatial

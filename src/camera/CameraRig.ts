@@ -37,8 +37,9 @@ export const LENSES: Record<CameraMode, LensProfile> = {
   },
   // Chest-mounted body camera: very wide, fisheye-ish, crunchy sensor.
   bodycam: {
+    // Same grade and exposure bias as the driver view, so getting in and out doesn't shift the light.
     barrel: 0.26, chroma: 0.012, noise: 1.35, sharpen: 0.55, vignette: 0.32,
-    saturation: 0.86, contrast: 1.12, tint: new THREE.Color(0.99, 1.0, 0.985), ev: 0.8, shutter: 0.55,
+    saturation: 0.9, contrast: 1.1, tint: new THREE.Color(1, 1, 1), ev: 0.82, shutter: 0.55,
   },
 };
 
@@ -60,7 +61,7 @@ export interface RigContext {
   } | null;
   mouseDX: number;
   mouseDY: number;
-  wheel: number;
+  /** Right mouse held: zoom in while held. */
   zoomHeld: boolean;
   sensitivity: number;
   invertY: boolean;
@@ -159,8 +160,7 @@ export class CameraRig {
     } else if (c.walker) {
       // Chest-mounted bodycam. The torso follows the mouse through a spring, so
       // quick looks overshoot and settle; footfalls jolt the frame.
-      this.zoom = clamp(this.zoom * Math.pow(1.15, -c.wheel), 1, 4);
-      if (c.zoomHeld) this.zoom = Math.max(this.zoom, 2);
+      this.zoom = damp(this.zoom, c.zoomHeld ? 2 : 1, 14, c.dt);
       this.pitch = clamp(this.pitch, -1.4, 1.2);
       const k = 150, damping = 17;
       const dy = wrapAngle(this.yaw - this.lookYaw);

@@ -154,16 +154,24 @@ void main() {
 export const LUMA_FRAGMENT = /* glsl */ `
 precision highp float;
 uniform sampler2D tScene;
+uniform sampler2D tDepth;
 uniform sampler2D tGlass;
 uniform vec2 uSrcTexel;
+uniform float uNear;
+uniform float uFar;
 varying vec2 vUv;
-// Meter the world, not the car interior: interior pixels (glass alpha = 1) are skipped.
+// Meter the world, not what's right in front of the lens: the car interior
+// (glass alpha = 1) and anything nearer than ~20 m (the truck beside you on
+// foot, the road at your feet) count for almost nothing, so the exposure is
+// the same in the cab and on foot.
 void main() {
   float acc = 0.0, wsum = 0.0;
   for (int y = -2; y <= 2; y++)
     for (int x = -2; x <= 2; x++) {
       vec2 uv = vUv + vec2(float(x), float(y)) * uSrcTexel * 3.0;
-      float w = 1.0 - texture2D(tGlass, uv).a * 0.97;
+      float d = texture2D(tDepth, uv).r;
+      float viewZ = uNear * uFar / (uFar - d * (uFar - uNear));
+      float w = (1.0 - texture2D(tGlass, uv).a * 0.97) * mix(0.03, 1.0, smoothstep(10.0, 25.0, viewZ));
       vec3 c = texture2D(tScene, uv).rgb;
       acc += log(max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-4)) * w;
       wsum += w;
