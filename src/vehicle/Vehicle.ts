@@ -216,7 +216,6 @@ export class Vehicle {
     const windRel = Math.hypot(this.wind.x - this.vel.x, this.wind.z - this.vel.z);
     if (windRel > 55) {
       this.damage((windRel - 55) * 0.1 * dt);
-      this.windshieldCracks = Math.min(1, this.windshieldCracks + (windRel - 55) * 0.002 * dt);
     }
     // At 0% the truck is wrecked but still limps along on reduced power.
     if (this.health <= 0) this.destroyed = true;

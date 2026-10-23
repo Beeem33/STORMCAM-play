@@ -13,6 +13,7 @@ import { atmo, patchMaterial } from '../rendering/Atmosphere';
 
 const COUNT = 70000;
 const TILE = 64;
+const TILE_NEAR = 16;
 
 export class Grass {
   readonly mesh: THREE.Mesh;
@@ -25,7 +26,12 @@ export class Grass {
     const blade = new Float32Array(COUNT * 12);
     const col = new Float32Array(COUNT * 9);
     for (let i = 0; i < COUNT; i++) {
-      const x = Math.random() * TILE, z = Math.random() * TILE, r = Math.random(), yaw = Math.random() * Math.PI * 2;
+      // Half the blades fill a small tile right around the viewer (dense underfoot), half the wider one.
+      // The tile size is packed into the sign of r: negative = near tile.
+      const near = i < COUNT / 2;
+      const tile = near ? TILE_NEAR : TILE;
+      const x = Math.random() * tile, z = Math.random() * tile, yaw = Math.random() * Math.PI * 2;
+      const r = (0.001 + Math.random() * 0.998) * (near ? -1 : 1);
       // Triangle: two base corners and the tip; x = across (-0.5..0.5), y = up (0..1).
       pos.set([-0.5, 0, 0, 0.5, 0, 0, 0.1 * (r - 0.5), 1, 0], i * 9);
       for (let k = 0; k < 3; k++) blade.set([x, z, r, yaw], i * 12 + k * 4);
@@ -64,11 +70,13 @@ float gGrassH;`,
           '#include <color_vertex>',
           `#include <color_vertex>
 {
-  float T = ${TILE.toFixed(1)};
+  bool nearTile = aBlade.z < 0.0;
+  float T = nearTile ? ${TILE_NEAR.toFixed(1)} : ${TILE.toFixed(1)};
   vec2 wp = uGrassCam.xz + mod(aBlade.xy - uGrassCam.xz + 0.5 * T, T) - 0.5 * T;
-  float r = aBlade.z;
+  float r = abs(aBlade.z);
   float dist = length(wp - uGrassCam.xz);
-  float keep = 1.0 - smoothstep(20.0, 30.0, dist);
+  // The near tile fades out at its edge; the wide one fades with distance.
+  float keep = nearTile ? 1.0 - smoothstep(5.5, 7.8, max(abs(wp.x - uGrassCam.x), abs(wp.y - uGrassCam.z))) : 1.0 - smoothstep(20.0, 30.0, dist);
   // Field type and roads decide what grows here.
   int ft = w_fieldType(wp);
   vec4 rd = w_roads(wp);

@@ -74,8 +74,9 @@ export class WeatherSystem {
       // others fire farther out on either side.
       let upstream: number, lateral: number;
       if (lead) {
-        upstream = 2500 + r() * 1800;
-        lateral = (r() - 0.5) * 3200;
+        // Close enough that its tornado touches down at the edge of the chase area.
+        upstream = 900 + r() * 800;
+        lateral = (r() - 0.5) * 1400;
       } else {
         upstream = 5000 + r() * 2000;
         lateral = side * (3600 + r() * 1200);

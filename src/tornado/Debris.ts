@@ -16,6 +16,7 @@ const MAX_BODIES = 160;
 
 interface Body {
   obj: THREE.Object3D;
+  mass: number;
   vel: THREE.Vector3;
   angVel: THREE.Vector3;
   drag: number;
@@ -42,8 +43,8 @@ export class DebrisSystem {
   private readonly tint = new Float32Array(COUNT * 3);
   private readonly bodies: Body[] = [];
   private spawnAcc = 0;
-  /** Called when a fragment passes close to `hitTarget`: strength 0..1. */
-  onHit: ((strength: number, pos: THREE.Vector3) => void) | null = null;
+  /** Called when a fragment or thrown object strikes `hitTarget`: strength 0..1, where, and (for thrown objects) its velocity and mass. */
+  onHit: ((strength: number, pos: THREE.Vector3, vel?: THREE.Vector3, mass?: number) => void) | null = null;
   hitTarget: THREE.Vector3 | null = null;
   /** Number of fragments currently airborne (for scoring). */
   airborne = 0;
@@ -78,6 +79,7 @@ export class DebrisSystem {
     this.group.attach(obj);
     this.bodies.push({
       obj,
+      mass,
       vel: vel.clone(),
       angVel: new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4),
       drag: 0.9 / Math.max(0.3, mass),
@@ -191,9 +193,9 @@ export class DebrisSystem {
           b.vel.multiplyScalar(0.3);
           b.vel.y = Math.abs(b.vel.y) * 0.3;
         }
-        if (this.hitTarget && o.position.distanceTo(this.hitTarget) < 3.2 && b.vel.length() > 10) {
-          this.onHit?.(Math.min(1, b.vel.length() / 40), o.position.clone());
-          b.vel.multiplyScalar(-0.3);
+        if (this.hitTarget && o.position.distanceTo(this.hitTarget) < 3.0 && b.vel.length() > 8) {
+          this.onHit?.(Math.min(1, (b.vel.length() / 40) * (0.5 + Math.min(1.5, b.mass) * 0.5)), o.position.clone(), b.vel.clone(), b.mass);
+          b.vel.multiplyScalar(-0.25);
         }
       }
       if (b.life <= 0) {

@@ -11,7 +11,7 @@ import { getNoise2D } from '../rendering/NoiseTextures';
  * the fragment shader, so there are no road meshes to keep in sync.
  */
 
-const N = 440;
+const N = 340;
 const K = 7.2;
 const EXTENT = 20000;
 
@@ -81,6 +81,11 @@ void groundShade(vec3 wp, float pix, out vec3 albedo, out float rough, out vec2 
   vec4 nSm = gnoise(wp.xz / 23.0);
   vec4 nFine = gnoise(wp.xz / 2.7);
   float fineFade = 1.0 - smoothstep(0.02, 0.25, pix);
+  // Close-up grass detail: tufts ~0.5 m across and blade streaks, only where pixels are small.
+  float tinyFade = 1.0 - smoothstep(0.006, 0.06, pix);
+  vec4 nTuft = gnoise(wp.xz / 0.55 + nFine.rg * 0.6);
+  vec4 nBlade = gnoise(wp.xz * vec2(1.0 / 0.09, 1.0 / 0.32) + nTuft.ba);
+  float tuft = smoothstep(0.28, 0.72, nTuft.r * 0.7 + nFine.g * 0.3);
   tilt = (vec2(nFine.r, nFine.g) - 0.5) * 0.35 * fineFade + (vec2(nSm.r, nSm.g) - 0.5) * 0.12;
 
   // ---- Fields --------------------------------------------------------------
@@ -115,11 +120,21 @@ void groundShade(vec3 wp, float pix, out vec3 albedo, out float rough, out vec2 
   } else {              // CRP prairie grass, golden
     field = mix(vec3(0.23, 0.19, 0.115), vec3(0.15, 0.13, 0.075), nSm.r * 0.7 + nMid.b * 0.3);
   }
+  // Grass texture on grassy ground: clumps with soil showing between them,
+  // streaky blades and specks of dead straw.
+  float grassy = (ft == 0 || ft == 1 || ft == 4) ? 1.0 : 0.0;
+  vec3 gaps = vec3(0.075, 0.06, 0.04);
+  vec3 straw = vec3(0.3, 0.26, 0.15);
+  vec3 tufted = mix(gaps, field * (0.75 + 0.6 * nBlade.r), 0.35 + 0.65 * tuft);
+  tufted = mix(tufted, straw, smoothstep(0.78, 0.92, nBlade.a) * 0.45);
+  field = mix(field, tufted, tinyFade * grassy);
+  tilt += (vec2(nBlade.g, nTuft.g) - 0.5) * 0.4 * tinyFade * grassy;
   // Field-edge grass strip and terraces.
   float edgeD = min(adx, adz);
   float strip = 1.0 - smoothstep(FENCE_OFFSET + 1.0, FENCE_OFFSET + 5.0, edgeD);
   vec3 verge = mix(vec3(0.06, 0.09, 0.032), vec3(0.1, 0.11, 0.05), nSm.b);
   verge *= 0.85 + 0.3 * nFine.r * fineFade;
+  verge = mix(verge, mix(gaps, verge * (0.75 + 0.6 * nBlade.r), 0.4 + 0.6 * tuft), tinyFade);
   albedo = mix(field, verge, strip);
   rough = fieldRough;
   spec = 0.14 + 0.06 * wet;
@@ -132,6 +147,7 @@ void groundShade(vec3 wp, float pix, out vec3 albedo, out float rough, out vec2 
   vec3 ditchGrass = mix(vec3(0.055, 0.1, 0.03), vec3(0.085, 0.125, 0.04), nSm.r);
   ditchGrass = mix(ditchGrass, vec3(0.2, 0.18, 0.11), smoothstep(0.62, 0.8, nMid.g) * 0.5); // dead patches
   ditchGrass *= 0.82 + 0.36 * nFine.g * fineFade;
+  ditchGrass = mix(ditchGrass, mix(gaps, ditchGrass * (0.75 + 0.6 * nBlade.r), 0.45 + 0.55 * tuft), tinyFade);
   albedo = mix(albedo, ditchGrass, ditchZone);
   rough = mix(rough, 0.9, ditchZone);
 

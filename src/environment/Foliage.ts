@@ -88,7 +88,8 @@ float gLeaf;`,
   float edge = 1.0 - abs(dot(normalize(vLeafN), V));
   float dist = length(cameraPosition - vLeafPos);
   // Ragged edges: holes open where the surface turns away from the eye; fade out with distance.
-  float cut = mix(0.12, 0.62, edge) * (1.0 - smoothstep(250.0, 700.0, dist));
+  // Only near trees get ragged, see-through edges: discard defeats early depth rejection.
+  float cut = mix(0.12, 0.62, edge) * (1.0 - smoothstep(90.0, 220.0, dist));
   diffuseColor.a = gLeaf > cut ? 1.0 : 0.0;
   // Gaps between clumps are darker; back faces (inside the crown) darker still.
   diffuseColor.rgb *= mix(0.55, 1.15, smoothstep(0.25, 0.75, gLeaf));

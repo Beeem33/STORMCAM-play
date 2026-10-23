@@ -40,7 +40,8 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 - **Random days:** the player starts at a random spot on the section roads
   (sometimes the gas station), and the storms come from a random direction
   with the tornadic storm placed randomly upstream.
-- **Grass:** ~70k wind-blown blades around the camera, by field type (tall
+- **Grass:** ~70k wind-blown blades around the camera (half packed into a
+  dense 16 m patch underfoot), by field type (tall
   wheat and prairie, short pasture, sparse young crops, bare plowed ground,
   shaggy verges along the roads), flattened under the truck.
 - **Storm menace:** near a tornado the image darkens and shifts to a sickly
@@ -60,6 +61,21 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   picked up and carried by the vortex's wind field, tumbling (the camera
   spins with him), for up to ~7 s before it kills him, or sooner if he's
   slammed into the ground.
+- **Flying missiles:** within ~3 vortex-widths the air fills with junk flung
+  across the truck's path from upwind (boards, roofing sheets, fence posts,
+  oil drums, limbs, now and then a round bale), more the closer you are.
+  Hits dent the truck where they land, shove it (heavy ones can roll it) and
+  crack the windshield if they strike the front.
+- **Windshield:** cracks only when something hits it (a localised star crack
+  sized by the hit; a big one shatters it into a crazed web); occasional
+  hail chips in heavy hail; clean glass every new day.
+- **Parts tear off:** doors, hood (an engine bay shows underneath), brush
+  guard, roof rack (with the anemometer), bumpers and fender flares each
+  take a few hits before ripping away and flying on the wind; violent core
+  winds strip them too. Bolted back on each day.
+- **Tornado stays reachable:** near the edge of the chase area its storm
+  turns back toward the middle, and it's never carried more than ~80 m past
+  the edge roads.
 - **Truck damage:** every hard landing or crash dents the panels where it
   hit and scrapes the paint through to primer and bare metal (up to 14
   dents; nearby hits deepen a dent).
@@ -210,3 +226,7 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   - Static buildings are merged per material; trees are batched with
     per-instance culling and LODs.
   - The canvas renders at the internal resolution, not full Retina.
+  - Landmarks (several draw calls each) are skipped past ~1.8 km and
+    farmsteads past ~2.8 km; the terrain grid is 340² (was 440²); foliage
+    only uses its ragged, alpha-tested edges within ~220 m. That took a busy
+    frame from ~470 draw calls / 1.5M triangles to ~250 / 0.95M.

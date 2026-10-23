@@ -304,6 +304,7 @@ export class WorldProps {
     if (Math.hypot(cam.x - this.lastLodCenter.x, cam.z - this.lastLodCenter.y) > 50) {
       this.lastLodCenter.set(cam.x, cam.z);
       for (const t of this.trees) t.pool.updateLod(cam, 420);
+      this.cullByRange(cam);
     }
     if (Math.hypot(cam.x - this.lastFenceCenter.x, cam.z - this.lastFenceCenter.y) > 60) {
       this.lastFenceCenter.set(cam.x, cam.z);
@@ -627,6 +628,21 @@ export class WorldProps {
   // ------------------------------------------------------------------ landmarks
   /** Standalone landmarks across the chase area (town, windmills, pumpjacks, pivots…). */
   private readonly features: Building[] = [];
+
+  /**
+   * Skip drawing what's only a few pixels tall: landmarks (each several draw
+   * calls) past ~1.8 km, farmsteads past ~2.8 km. The fog has mostly
+   * swallowed them by then anyway.
+   */
+  private cullByRange(cam: THREE.Vector3): void {
+    for (const f of this.features) {
+      if (f.destroyed) continue;
+      const o = f.display.parent ? f.display : f.obj;
+      const p = f.obj.position;
+      o.visible = Math.hypot(p.x - cam.x, p.z - cam.z) < (f.label === 'Barricade' ? 1200 : 1800);
+    }
+    for (const fs of this.farmsteads.values()) fs.group.visible = Math.hypot(fs.center.x - cam.x, fs.center.y - cam.z) < 2800;
+  }
   private readonly windmills: THREE.Object3D[] = [];
   private readonly pumpjacks: { group: THREE.Group; phase: number; speed: number }[] = [];
   private readonly pivots: { group: THREE.Group; speed: number }[] = [];

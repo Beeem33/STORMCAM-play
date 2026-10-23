@@ -241,44 +241,60 @@ export class Windshield {
       }
     }
 
-    // --- Hail cracks.
-    if (cracks > this.crackLevel + 0.06) this.addCrack();
-
+    void cracks;
     this.draw();
   }
 
-  private crackLevel = 0;
-  private addCrack(): void {
-    this.crackLevel += 0.06;
+  /** Glass is past saving: hits only add to the web. */
+  shattered = false;
+
+  /**
+   * Something hit the glass. 0..1 severity: a stone chip grows into a star
+   * crack, a heavy hit runs cracks across the whole pane, and a big enough one
+   * shatters it into a crazed spiderweb. `u`,`v` (0..1 across/up the glass)
+   * place the impact; random when omitted.
+   */
+  impact(severity: number, u = Math.random(), v = 0.2 + Math.random() * 0.7): void {
+    const sev = Math.max(0, Math.min(1, severity));
     const g = this.cracks.getContext('2d')!;
-    const cx = 60 + Math.random() * (W - 120);
-    const cy = 30 + Math.random() * (H - 60);
+    const cx = 30 + u * (W - 60);
+    const cy = (1 - v) * H;
     g.lineCap = 'round';
-    const branches = 5 + Math.floor(Math.random() * 6);
-    for (let b = 0; b < branches; b++) {
-      let x = cx, y = cy;
-      let a = Math.random() * Math.PI * 2;
-      const n = 6 + Math.floor(Math.random() * 10);
-      for (let s = 0; s < n; s++) {
-        const nx = x + Math.cos(a) * (4 + Math.random() * 9);
-        const ny = y + Math.sin(a) * (4 + Math.random() * 9);
+    const crack = (x0: number, y0: number, a0: number, steps: number, len: number, width: number) => {
+      let x = x0, y = y0, a = a0;
+      for (let s = 0; s < steps; s++) {
+        const nx = x + Math.cos(a) * len * (0.6 + Math.random() * 0.8);
+        const ny = y + Math.sin(a) * len * (0.6 + Math.random() * 0.8);
         // Encode a sharp refraction kink: normal perpendicular to the crack.
         const px = -Math.sin(a), py = Math.cos(a);
         g.strokeStyle = `rgb(${Math.round(128 + px * 120)}, ${Math.round(128 - py * 120)}, 235)`;
-        g.lineWidth = 1.4;
+        g.lineWidth = width;
         g.beginPath();
         g.moveTo(x, y);
         g.lineTo(nx, ny);
         g.stroke();
         x = nx;
         y = ny;
-        a += (Math.random() - 0.5) * 0.9;
+        a += (Math.random() - 0.5) * 0.7;
+      }
+    };
+    const branches = 4 + Math.round(sev * 12);
+    for (let b = 0; b < branches; b++) crack(cx, cy, (b / branches) * Math.PI * 2 + Math.random() * 0.4, 4 + Math.round(sev * 22), 5 + sev * 6, 1.2 + sev * 0.8);
+    if (sev > 0.85 && !this.shattered) {
+      // Shattered: concentric rings of short cracks across the pane (laminated glass crazes, it doesn't fall out).
+      this.shattered = true;
+      for (let ring = 1; ring <= 9; ring++) {
+        const r = ring * 26;
+        for (let k = 0; k < 10 + ring * 4; k++) {
+          const a = Math.random() * Math.PI * 2;
+          crack(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.7, a + Math.PI / 2 + (Math.random() - 0.5) * 0.6, 2 + Math.floor(Math.random() * 3), 7, 1.1);
+        }
       }
     }
-    // Star impact.
+    // Impact point.
     g.fillStyle = 'rgb(128,128,255)';
     g.beginPath();
-    g.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    g.arc(cx, cy, 2 + sev * 4, 0, Math.PI * 2);
     g.fill();
   }
 
@@ -305,8 +321,11 @@ export class Windshield {
     }
   }
 
+  /** New day: clean, unbroken glass. */
   clear(): void {
     this.drops.length = 0;
+    this.cracks.getContext('2d')!.clearRect(0, 0, W, H);
+    this.shattered = false;
   }
 }
 

@@ -16,6 +16,8 @@ import { WindDebris } from '../weather/WindDebris';
 import { ProbeTerminal } from '../ui/ProbeTerminal';
 import { Grass } from '../environment/Grass';
 import { TruckDamage } from '../vehicle/TruckDamage';
+import { Missiles } from '../tornado/Missiles';
+import { BreakableParts } from '../vehicle/BreakableParts';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -63,6 +65,8 @@ export class Game {
   readonly terminal: ProbeTerminal;
   readonly grass = new Grass();
   readonly truckDamage: TruckDamage;
+  readonly missiles: Missiles;
+  readonly breakables: BreakableParts;
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
@@ -139,6 +143,12 @@ export class Game {
     this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
     this.terminal = new ProbeTerminal(uiRoot);
     this.truckDamage = new TruckDamage(this.parts.root);
+    this.missiles = new Missiles(this.tornadoes.debris);
+    this.breakables = new BreakableParts(this.parts.root, this.vehicleObj, this.tornadoes.debris);
+    const partLabel: Record<string, string> = { Hood: 'hood', BrushGuard: 'brush guard', RoofRack: 'roof rack', Mirrors: 'mirrors', Mirror_L: 'left mirror', Mirror_R: 'right mirror', Bumper_F: 'front bumper', Bumper_R: 'rear bumper', Anemometer: 'anemometer', Door_FL: "driver's door", Door_FR: 'passenger door', Door_RL: 'rear left door', Door_RR: 'rear right door' };
+    this.breakables.onBreak = (name) => {
+      if (this.state === 'playing') this.ui.toast(`The ${partLabel[name] ?? name.replace(/_/g, ' ').toLowerCase()} tore off!`, 'alert', 3000);
+    };
     this.probes.onProgram = (d) => this.terminal.show(d.id, () => this.probes.arm(d));
     this.vehicle.onRighted = () => {
       if (this.state === 'playing') this.ui.toast('You rock the truck back onto its wheels.', 'info', 4000);
@@ -209,18 +219,42 @@ export class Game {
       if (this.state === 'playing') this.ui.toast('Spotters report the tornado has lifted.', 'info', 6000);
     };
     this.tornadoes.debris.hitTarget = this.vehicle.pos;
-    this.tornadoes.debris.onHit = (strength, pos) => {
+    this.tornadoes.debris.onHit = (strength, pos, vel, mass) => {
       const eff = this.career.effects;
       if (!this.onFoot) {
-        this.vehicle.damage(strength * 4);
-        this.vehicle.windshieldCracks = Math.min(1, this.vehicle.windshieldCracks + strength * 0.08 * eff.glassDamage);
-        this.shakeImpulse = Math.max(this.shakeImpulse, strength);
+        const v = this.vehicle;
+        const heavy = mass ?? 0.2;
+        v.damage(strength * (3 + heavy * 1.5));
+        // Where on the truck it struck: snap to the body's surface on the side it came from.
+        const local = this.vehicleObj.worldToLocal(pos.clone());
+        const ex = Math.abs(local.x) / 1.0, ey = Math.abs(local.y - 0.35) / 0.75, ez = Math.abs(local.z) / 2.5;
+        if (ex >= ey && ex >= ez) local.x = Math.sign(local.x) * 1.0;
+        else if (ez >= ey) local.z = Math.sign(local.z) * 2.5;
+        else local.y = local.y > 0.35 ? 1.1 : -0.4;
+        local.x = clamp(local.x, -1, 1);
+        local.y = clamp(local.y, -0.4, 1.1);
+        local.z = clamp(local.z, -2.5, 2.5);
+        this.truckDamage.add(local, strength * (0.4 + Math.min(1, heavy / 4)));
+        this.breakables.hit(local, strength * (0.4 + heavy * 0.25), vel ?? v.vel);
+        // Front and above the hood: it's the windshield.
+        if (local.z < -0.3 && local.z > -2.0 && local.y > 0.15) {
+          const sev = strength * (0.45 + Math.min(0.6, heavy * 0.12)) * eff.glassDamage;
+          this.windshield.impact(sev, clamp((local.x + 0.85) / 1.7, 0, 1), clamp((local.y - 0.15) / 0.8, 0.05, 0.95));
+          v.windshieldCracks = Math.min(1, v.windshieldCracks + sev * 0.3);
+        }
+        // Heavy junk shoves the truck and can roll it.
+        if (vel && mass) {
+          const k = (mass * 12) / v.mass;
+          v.applyImpulse(vel.clone().multiplyScalar(k).setY(Math.abs(vel.y) * k + mass * 0.08), new THREE.Vector3((Math.random() - 0.5) * mass * 0.12, (Math.random() - 0.5) * mass * 0.06, (Math.random() - 0.5) * mass * 0.12));
+        }
+        this.shakeImpulse = Math.max(this.shakeImpulse, Math.min(1, strength * (0.6 + heavy * 0.2)));
       }
-      this.audio.impact(strength > 0.5 ? 'body' : 'debris', strength, pos);
+      this.audio.impact(strength > 0.4 || (mass ?? 0) > 1 ? 'body' : 'debris', strength, pos);
     };
     this.vehicle.onImpact = (strength, kind, local) => {
       // Dents: landings show from ~7 m/s, crashes from ~5 m/s.
       this.truckDamage.add(local, (strength - (kind === 'ground' ? 7 : 5)) / 18);
+      this.breakables.hit(local, (strength - (kind === 'ground' ? 9 : 7)) / 14, this.vehicle.vel);
       // Being carried by the vortex is survivable; being slammed down or into something isn't.
       if (!this.onFoot && !this.driverKilled && this.inVortexTime > 0 && (kind === 'ground' ? strength > 22 : strength > 18)) {
         this.driverKilled = true;
@@ -266,6 +300,7 @@ export class Game {
     this.recorder.reset();
     this.probes.reset();
     this.truckDamage.clear();
+    this.breakables.reset();
     this.terminal.close();
     this.windDebris.clear();
     this.radar.reset();
@@ -322,6 +357,38 @@ export class Game {
     this.setupDay();
     this.setupMenuScene();
     this.ui.showMenu();
+  }
+
+  /**
+   * The tornado has to stay reachable: as it nears the edge of the chase area
+   * its parent storm turns back inward (and comes straight in if it formed
+   * outside), so it wanders the map instead of leaving it.
+   */
+  private keepTornadoInside(dt: number): void {
+    const t = this.tornadoes.tornado;
+    if (!t) return;
+    const s = t.storm;
+    const speed = Math.max(6, Math.hypot(s.vx, s.vz));
+    const lim = MAP_HALF - 400;
+    const out = Math.max(Math.abs(t.position.x), Math.abs(t.position.z)) - lim;
+    if (out > 0) {
+      // Near or past the edge: head back toward the middle, turning harder the farther out it is.
+      const d = Math.hypot(t.position.x, t.position.z) || 1;
+      const tx = (-t.position.x / d) * speed, tz = (-t.position.z / d) * speed;
+      const k = 1 - Math.exp(-dt * (0.4 + out / 250));
+      s.vx += (tx - s.vx) * k;
+      s.vz += (tz - s.vz) * k;
+    }
+    // Keep its overall speed the same so it still feels like it's travelling.
+    const now = Math.hypot(s.vx, s.vz) || 1;
+    s.vx *= speed / now;
+    s.vz *= speed / now;
+    // Hard limit: never more than a stone's throw past the edge roads, where the truck can still reach it.
+    const hard = MAP_HALF + 80;
+    for (const axis of ['x', 'z'] as const) {
+      const over = Math.abs(t.position[axis]) - hard;
+      if (over > 0) s[axis] -= Math.sign(t.position[axis]) * Math.min(over, 30 * dt);
+    }
   }
 
   /** How high the tornado has thrown the truck; coming down from that height is fatal. */
@@ -541,6 +608,8 @@ export class Game {
     const baseAlt = this.lighting.sky.baseAlt;
     this.tornadoes.update(playing ? sdt : 0, baseAlt);
     this.probes.update(playing ? sdt : 0);
+    if (playing) this.keepTornadoInside(sdt);
+    this.missiles.update(playing ? sdt : 0, this.tornadoes.tornado, this.vehicle.pos, playing && !this.onFoot);
     if (this.terminal.open && (!this.onFoot || this.walker.dead || this.state !== 'playing')) this.terminal.close();
     const L = this.weather.local;
     const t = this.tornadoes.tornado;
@@ -665,8 +734,9 @@ export class Game {
     this.precip.update(this.time, cam.position, this.camVel, this.windAtCam, L.rain, L.hail, inCar ? this.vehicleObj : null, atmo.uViewport.value, skyLight);
     this.windshield.update(sdt, L.rain, L.hail, this.vehicle.forwardSpeed, this.vehicle.windshieldCracks);
     if (L.hail > 0.2 && playing) {
-      this.vehicle.windshieldCracks = Math.min(1, this.vehicle.windshieldCracks + sdt * L.hail * 0.006 * eff.glassDamage);
       this.vehicle.damage(sdt * L.hail * 0.15);
+      // Now and then a big stone chips the glass.
+      if (!this.onFoot && L.hail > 0.5 && Math.random() < sdt * 0.04 * L.hail) this.windshield.impact(0.12 + Math.random() * 0.15);
     }
     this.vehicleObj.updateMatrixWorld(true);
     this.windshield.syncProxies();
@@ -722,13 +792,14 @@ export class Game {
       const inner = clamp(1 - (d - R * 0.6) / (R * 1.1), 0, 1);
       const lift = v.pos.y - CG_HEIGHT - heightAt(v.pos.x, v.pos.z);
       this.inVortexTime = 4;
+      const windRel = Math.hypot(v.wind.x - v.vel.x, v.wind.z - v.vel.z);
+      this.breakables.wind(dt, windRel, v.vel, v.wind);
       // Inside the vortex the flow carries the truck: it spins and drifts down
       // rather than dropping like a stone. Flung out, it falls freely.
       if (d < R * 1.6 && lift > 1.5 && v.vel.y < -10) v.vel.y = -10;
       // Hundreds of feet is plenty: near the top of the ride it stops climbing.
       if (lift > 140 && v.vel.y > 0) v.vel.y *= Math.max(0, 1 - dt * 3);
       v.damage(dt * 4 * severity * inner);
-      v.windshieldCracks = Math.min(1, v.windshieldCracks + dt * 0.3 * inner * this.career.effects.glassDamage);
       this.shakeImpulse = Math.max(this.shakeImpulse, 0.4 + inner * 0.6);
       if (Math.random() < dt * 1.4 * severity * inner) {
         t.windAt(v.pos, _w);
