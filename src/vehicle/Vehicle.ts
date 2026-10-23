@@ -113,7 +113,8 @@ export class Vehicle {
   tireSlip = 0;
   surface: SurfaceKind = 'asphalt';
   /** Callbacks for impacts (strength m/s). */
-  onImpact: ((strength: number, kind: 'collision' | 'ground') => void) | null = null;
+  /** Hard contact: speed (m/s), what kind, and where on the truck (its own frame, from the CG). */
+  onImpact: ((strength: number, kind: 'collision' | 'ground', local: THREE.Vector3) => void) | null = null;
 
   colliders: (x: number, z: number, r: number) => Iterable<Collider2D> = () => [];
 
@@ -442,6 +443,7 @@ export class Vehicle {
   private bodyGroundContacts(q: THREE.Quaternion, h: number): void {
     void h;
     let hit = 0;
+    let hitPoint: THREE.Vector3 | null = null;
     for (const lp of Vehicle.BODY_POINTS) {
       const p = _v1.copy(lp).applyQuaternion(q).add(this.pos);
       const g = heightAt(p.x, p.z);
@@ -456,12 +458,15 @@ export class Vehicle {
       const F = new THREE.Vector3(Ft.x, Fn, Ft.z);
       this.force.add(F);
       this.torque.add(new THREE.Vector3().crossVectors(rArm, F));
-      hit = Math.max(hit, -vc.y);
+      if (-vc.y > hit) {
+        hit = -vc.y;
+        hitPoint = lp;
+      }
     }
     // One landing is one impact: take the hardest point once, not every point every sub-step.
     if (hit > 6 && this.landCooldown <= 0) {
       this.damage((hit - 6) * 2.5);
-      this.onImpact?.(hit, 'ground');
+      this.onImpact?.(hit, 'ground', hitPoint ?? new THREE.Vector3(0, -0.4, 0));
       this.jolt = 1;
       this.landCooldown = 0.6;
     }
@@ -522,7 +527,9 @@ export class Vehicle {
           const impact = -vn;
           if (impact > 2 && this.hitCooldown <= 0) {
             this.damage(impact > 8 ? (impact - 6) * 2.5 : 0);
-            this.onImpact?.(impact, 'collision');
+            // Where it struck: the side of the body facing the obstacle, at bumper height.
+            const at = new THREE.Vector3(cx - nx * r * 0.95, this.pos.y - 0.1, cz - nz * r * 0.95).sub(this.pos).applyQuaternion(_q.copy(this.quat).invert());
+            this.onImpact?.(impact, 'collision', at);
             this.jolt = Math.min(1, this.jolt + impact * 0.08);
             this.hitCooldown = 0.4;
           }

@@ -50,6 +50,8 @@ export interface RigContext {
     animated: boolean;
     /** Chest-mount lean/twist/roll from the body animation (rad, YXZ), when animated. */
     sway: THREE.Euler | null;
+    /** Thrown around by the vortex: extra tumbling rotation (rad). */
+    tumble: THREE.Euler | null;
   } | null;
   mouseDX: number;
   mouseDY: number;
@@ -191,6 +193,7 @@ export class CameraRig {
         this.handShake[2].at(t) * handAmp * 1.2 + gaitRoll - this.lookVel.x * 0.01,
       );
       cam.quaternion.setFromEuler(_e);
+      if (w.tumble) cam.quaternion.multiply(_q.setFromEuler(w.tumble));
       cam.fov = c.bodycamFov / this.zoom;
     }
     if (c.impulse > 0) {

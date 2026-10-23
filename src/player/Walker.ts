@@ -20,6 +20,13 @@ export class Walker {
   /** Seconds standing still (tripod shots). */
   stillTime = 0;
   dead = false;
+  /** Picked up by the vortex: carried and thrown until it kills him. */
+  caught = false;
+  caughtTime = 0;
+  /** Camera tumble while caught (rad), and how fast it's spinning. */
+  readonly tumble = new THREE.Euler();
+  private readonly spin = new THREE.Vector3();
+  private airTime = 0;
   colliders: (x: number, z: number, r: number) => Iterable<Collider2D> = () => [];
   /** Extra obstacle (the vehicle) as an oriented box. */
   car: { x: number; z: number; rot: number; hx: number; hz: number } | null = null;
@@ -28,11 +35,54 @@ export class Walker {
     this.pos.set(x, heightAt(x, z), z);
     this.vel.set(0, 0, 0);
     this.dead = false;
+    this.caught = false;
+    this.caughtTime = 0;
+    this.tumble.set(0, 0, 0);
     this.stillTime = 0;
+  }
+
+  /** In the vortex: the wind carries him; gravity and the ground do the rest. */
+  private updateCaught(dt: number, wind: THREE.Vector3): void {
+    this.caughtTime += dt;
+    const k = Math.min(1, dt * 1.6);
+    this.vel.x += (wind.x - this.vel.x) * k;
+    this.vel.y += (wind.y * 0.9 - this.vel.y) * k - 9.81 * dt;
+    this.vel.z += (wind.z - this.vel.z) * k;
+    // Gusts inside the core fling him about.
+    this.vel.x += (Math.random() - 0.5) * 30 * dt;
+    this.vel.y += (Math.random() - 0.4) * 20 * dt;
+    this.vel.z += (Math.random() - 0.5) * 30 * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    const g = heightAt(this.pos.x, this.pos.z);
+    if (this.pos.y < g) {
+      const hit = -this.vel.y;
+      this.pos.y = g;
+      if (this.airTime > 1 && hit > 22) this.dead = true; // slammed into the ground
+      this.vel.y = Math.abs(this.vel.y) * 0.3;
+      this.vel.x *= 0.5;
+      this.vel.z *= 0.5;
+      this.airTime = 0;
+    } else this.airTime += dt;
+    if (this.caughtTime > 7) this.dead = true;
+    // Tumbling: the spin keeps changing as he's thrown around.
+    this.spin.x += (Math.random() - 0.5) * 40 * dt;
+    this.spin.y += (Math.random() - 0.5) * 30 * dt;
+    this.spin.z += (Math.random() - 0.5) * 40 * dt;
+    this.spin.clampLength(0, 9);
+    this.tumble.x += this.spin.x * dt;
+    this.tumble.y += this.spin.y * dt;
+    this.tumble.z += this.spin.z * dt;
+    this.strain = 1;
+    this.moving = 0;
+    this.eye.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
   }
 
   update(dt: number, move: { fwd: number; right: number; run: boolean }, yaw: number, wind: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.caught) {
+      this.updateCaught(dt, wind);
+      return;
+    }
     const speed = move.run ? 4.2 : 1.6;
     const sx = Math.sin(yaw), cz = Math.cos(yaw);
     // Camera yaw 0 looks toward -Z.
@@ -52,7 +102,16 @@ export class Walker {
       this.vel.x += (wind.x / w) * push * dt * 6;
       this.vel.z += (wind.z / w) * push * dt * 6;
     }
-    if (w > 56 || wind.y > 26) this.dead = true;
+    if (w > 50 || wind.y > 22) {
+      // Lifted off his feet.
+      this.caught = true;
+      this.caughtTime = 0;
+      this.airTime = 0;
+      this.vel.set(wind.x * 0.4, 6, wind.z * 0.4);
+      this.spin.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 6);
+      this.tumble.set(0, 0, 0);
+      return;
+    }
 
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;

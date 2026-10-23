@@ -188,7 +188,7 @@ export class Windshield {
 
     // --- Spawn drops (more when driving into the rain).
     const flowBoost = 1 + Math.max(0, fwdSpeed) / 9;
-    this.spawnAcc += dt * (rain * 260 * flowBoost + hail * 40);
+    this.spawnAcc += dt * (rain * 400 * flowBoost + hail * 40);
     while (this.spawnAcc >= 1 && this.drops.length < 900) {
       this.spawnAcc -= 1;
       const big = Math.random() < 0.08;

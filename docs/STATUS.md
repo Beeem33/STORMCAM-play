@@ -6,7 +6,7 @@ What exists in the code today, and what doesn't. Updated with each milestone.
 
 ### Done
 - **Project:** Three.js + TypeScript + Vite, modular folders, dev tools, docs.
-- **Map:** a 3 × 3-mile chase area of section roads around the gas station:
+- **Map:** a 2 × 2-mile chase area of section roads around the gas station:
   two paved highways crossing at the station, gravel roads on the other
   section lines. It has ditches, rolling terrain and five field types
   (wheat, pasture, plowed, row crop, prairie). ROAD CLOSED barricades sit
@@ -52,6 +52,15 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   (an intercept). The day report sells the data: up to about $4,000 for a
   near miss within 500 m of the vortex edge, more for an intercept and for
   stronger tornadoes. Each lost probe costs $250 to replace.
+- **Caught on foot:** past ~50 m/s wind or ~22 m/s updraft the chaser is
+  picked up and carried by the vortex's wind field, tumbling (the camera
+  spins with him), for up to ~7 s before it kills him, or sooner if he's
+  slammed into the ground.
+- **Truck damage:** every hard landing or crash dents the panels where it
+  hit and scrapes the paint through to primer and bare metal (up to 14
+  dents; nearby hits deepen a dent).
+- **Rain:** light rain anywhere under thick cloud, heavier in the core; up to
+  32k streaks and more windshield drops.
 - **Ending a day:** only the chaser's death ends it: caught on foot, or, in
   the truck, a violent impact while caught by the tornado (slammed down at
   over 22 m/s or into an object at over 18 m/s within 4 s of being in the
@@ -68,8 +77,12 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   pointing at the tornado (or the storm before it forms) with its distance,
   and the probe count. The radar draws a bold arrow on each storm showing
   where it will be in 20 minutes (red once it's tornadic).
-- **Tornado chaos:** the funnel condenses to the ground (unless
-  rain-wrapped) with a churning brown debris cloud at its base. Up to 4,000
+- **Tornado chaos:** a dark, dense condensation funnel (about 60% of the
+  damaging-wind width, flaring into the wall cloud) that reaches the ground,
+  sways along its length and wanders up to ~6 m/s on top of the storm's
+  motion; it carries through haze at half the normal fog so it reads from a
+  few kilometres. A churning brown debris cloud about two funnel-widths
+  across sits at its base. Up to 4,000
   debris fragments are ripped up and lofted; tree crowns are torn off and
   thrown, the strongest winds uproot whole trees, and telephone poles snap
   and fly (up to 160 large thrown objects at once).

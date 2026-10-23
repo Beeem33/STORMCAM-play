@@ -59,14 +59,14 @@ vec2 axisAt(float h) {
   float wig = uRope * sin(h * 3.14159);
   c += wig * vec2(sin(h * 7.0 + uTime * 0.22) * 55.0 + sin(h * 17.0 - uTime * 0.4) * 12.0,
                   cos(h * 6.0 - uTime * 0.18) * 50.0 + cos(h * 15.0 + uTime * 0.35) * 10.0);
-  // A slight constant waviness even when mature.
-  c += vec2(sin(h * 4.0 + uTime * 0.1), cos(h * 3.3 - uTime * 0.12)) * uRadius * 0.12;
+  // The column sways and snakes even when mature.
+  c += vec2(sin(h * 4.0 + uTime * 0.23), cos(h * 3.3 - uTime * 0.27)) * (uRadius * 0.35 + 18.0) * h;
   return c;
 }
 
 float funnelRadius(float h) {
-  float r = mix(uRadius, uTopR, pow(h, 2.0 + uRope * 2.0));
-  r += uTopR * 0.9 * smoothstep(0.86, 1.02, h);       // flares into the wall cloud
+  float r = mix(uRadius, uTopR, pow(h, 2.4 + uRope * 2.0));
+  r += uTopR * 1.6 * smoothstep(0.88, 1.03, h);       // flares into the wall cloud
   // Taper to a point at the bottom of the condensed part.
   float tip = 1.0 - uCond;
   r *= mix(0.15, 1.0, smoothstep(tip, tip + 0.12 + (1.0 - uCond) * 0.2, h));
@@ -107,7 +107,7 @@ vec3 field(vec3 p, out vec3 radial, out float hOut) {
   float skirt = (1.0 - smoothstep(spread * 0.3, spread, d + (n.b - 0.5) * spread * 0.7));
   float vert = exp(-max(dh, 0.0) / uDebrisH) * smoothstep(-6.0, 3.0, dh);
   // A tighter sheath of lofted debris wrapped around the lower funnel.
-  float sheath = (1.0 - smoothstep(R * 0.9, R * 1.7 + 20.0, d)) * exp(-max(dh, 0.0) / (uDebrisH * 1.2)) * 0.6;
+  float sheath = (1.0 - smoothstep(R * 0.9, R * 1.6 + 15.0, d)) * exp(-max(dh, 0.0) / (uDebrisH * 0.55)) * 0.6;
   float debris = uDebris * max(skirt * vert, sheath) * (0.45 + 1.5 * n.g * n2.b);
 
   float distHint = min(d - edge * 1.1, d - spread);
@@ -155,12 +155,12 @@ void main() {
       vec3 sky = uSkyHorizon * vec3(0.84, 0.97, 1.0);
       float stria = texture(uNoise, vec3(atan(radial.z, radial.x) * 0.9 + uTime * uSpin * 0.15, h * 6.0, 0.3)).r;
       // Darker than the cloud base so the funnel reads against the bright horizon.
-      vec3 cf = sky * (0.09 + 0.2 * lam) * mix(0.7, 1.05, h) * (0.8 + 0.4 * stria) + uSunColor * uSunAmt * pow(lam, 4.0) * 0.08;
+      vec3 cf = sky * (0.055 + 0.15 * lam) * mix(0.65, 1.0, h) * (0.8 + 0.4 * stria) + uSunColor * uSunAmt * pow(lam, 4.0) * 0.06;
       // Dust: a lighter brown on the lit side, so the churning base stands out from the funnel.
-      vec3 cd = vec3(0.27, 0.22, 0.17) * (0.35 + 0.65 * lam) * (0.45 + 0.6 * dot(uSkyHorizon, vec3(0.33)));
+      vec3 cd = vec3(0.2, 0.165, 0.13) * (0.35 + 0.65 * lam) * (0.45 + 0.6 * dot(uSkyHorizon, vec3(0.33)));
       vec3 c = (cf * f.x + cd * f.y) / dens;
       c += vec3(0.75, 0.78, 0.95) * uFlash * 0.6;
-      float sigma = f.x * 0.16 + f.y * 0.11;
+      float sigma = f.x * 0.38 + f.y * 0.08;
       float a = 1.0 - exp(-sigma * stepLen);
       col += T * a * c;
       depthAcc += T * a * t;
@@ -173,7 +173,8 @@ void main() {
   if (alpha < 0.003) discard;
   float dist = wAcc > 0.0 ? depthAcc / wAcc : t0;
   // Fog: blend premultiplied colour toward the sky behind by the fog factor.
-  vec3 fogged = applySkyFog(col / max(alpha, 1e-4), dist) * alpha;
+  // Dense and dark: it carries farther through the haze than the clouds do.
+  vec3 fogged = applySkyFog(col / max(alpha, 1e-4), dist * 0.45) * alpha;
   gl_FragColor = vec4(fogged, alpha);
 }
 `;
@@ -241,12 +242,15 @@ export class TornadoRenderer {
     this.mesh.visible = true;
     const u = this.material.uniforms;
     const P = t.params;
-    const debrisR = Math.max(70, t.radius * 1.7 + 50) * (0.8 + P.debrisDensity * 0.4);
-    const debrisH = 40 + t.radius * 0.35 + P.rating * 15;
+    const visR = Math.max(22, t.radius * 0.6);
+    // The debris cloud hugs the base: a couple of funnel-widths across.
+    const debrisR = (visR * 1.15 + 30) * (0.85 + P.debrisDensity * 0.3);
+    const debrisH = 25 + visR * 0.4 + P.rating * 10;
     (u.uBase.value as THREE.Vector3).copy(t.position);
     (u.uTop.value as THREE.Vector3).copy(t.top);
-    u.uRadius.value = t.radius;
-    u.uTopR.value = P.topRadius * (1 - t.rope * 0.5);
+    // The condensation funnel is narrower than the damaging winds around it.
+    u.uRadius.value = visR;
+    u.uTopR.value = (visR * 2.1 + 55) * (1 - t.rope * 0.5);
     u.uCond.value = t.condensation;
     u.uDebris.value = t.debris * Math.max(0.6, P.debrisDensity);
     u.uDebrisR.value = debrisR;

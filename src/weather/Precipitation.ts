@@ -9,7 +9,7 @@ import { SKYFOG_GLSL, skyFogUniforms } from '../rendering/Atmosphere';
  * vehicle cabin are culled.
  */
 
-const MAX_RAIN = 15000;
+const MAX_RAIN = 32000;
 const MAX_HAIL = 2500;
 
 const VERT = /* glsl */ `
@@ -150,7 +150,7 @@ export class Precipitation {
     viewport: THREE.Vector2,
     skyLight: THREE.Color,
   ): void {
-    this.rainGeo.instanceCount = Math.floor(MAX_RAIN * Math.min(1, rain * 1.1) * this.density);
+    this.rainGeo.instanceCount = Math.floor(MAX_RAIN * Math.min(1, rain * 1.4) * this.density);
     this.hailGeo.instanceCount = Math.floor(MAX_HAIL * hail);
     for (const [m, fall] of [[this.rainMat, 9], [this.hailMat, 22]] as const) {
       const u = m.uniforms;
@@ -167,6 +167,6 @@ export class Precipitation {
     }
     (this.rainMat.uniforms.uColor.value as THREE.Color).copy(skyLight).multiplyScalar(0.75);
     (this.hailMat.uniforms.uColor.value as THREE.Color).copy(skyLight).multiplyScalar(1.1);
-    this.rainMat.uniforms.uOpacity.value = 0.3 + rain * 0.3;
+    this.rainMat.uniforms.uOpacity.value = 0.34 + rain * 0.36;
   }
 }

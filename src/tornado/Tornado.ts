@@ -113,9 +113,10 @@ export class Tornado {
     const prev = _tmp.copy(this.position);
 
     // Drift relative to the parent meso: meander, then occlude to the rear-left as it ropes out.
-    const meander = Math.sin(this.age * 0.021 + P.coreRadius) * 0.6 + Math.sin(this.age * 0.047) * 0.4;
-    let da = meander * 2.5;
-    let db = Math.cos(this.age * 0.033) * 2.0;
+    // It wanders on its own as well as riding along with the storm.
+    const meander = Math.sin(this.age * 0.05 + P.coreRadius) * 0.6 + Math.sin(this.age * 0.11) * 0.4;
+    let da = meander * 6;
+    let db = Math.cos(this.age * 0.07) * 4.5 + Math.sin(this.age * 0.17) * 1.5;
     if (this.phase === 'rope' || this.phase === 'dissipating') {
       da -= 6.5;
       db -= 4.5;

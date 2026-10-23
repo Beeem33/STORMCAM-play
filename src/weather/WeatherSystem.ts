@@ -177,7 +177,9 @@ export class WeatherSystem {
     // Rain arrives with gust fronts — smooth it so it builds and eases.
     L.cover = damp(L.cover, cover, 0.6, dt);
     L.anvil = damp(L.anvil, anvil, 0.6, dt);
-    L.rain = damp(L.rain, smoothstep(0.05, 0.9, rain), 0.8, dt);
+    // Light rain falls anywhere under thick cloud; the core pours.
+    rain = Math.max(rain, smoothstep(0.45, 0.95, cover) * 0.35);
+    L.rain = damp(L.rain, smoothstep(0.03, 0.75, rain), 0.8, dt);
     L.hail = damp(L.hail, hail > 0.35 ? smoothstep(0.35, 0.9, hail) : 0, 1.5, dt);
     // Gusts.
     const gust = 1 + 0.35 * Math.sin(this.clock * 0.9) * Math.sin(this.clock * 0.37 + 1.3);

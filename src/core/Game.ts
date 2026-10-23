@@ -15,6 +15,7 @@ import { ProbeSystem } from '../gameplay/Probes';
 import { WindDebris } from '../weather/WindDebris';
 import { ProbeTerminal } from '../ui/ProbeTerminal';
 import { Grass } from '../environment/Grass';
+import { TruckDamage } from '../vehicle/TruckDamage';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -61,6 +62,7 @@ export class Game {
   readonly windDebris = new WindDebris();
   readonly terminal: ProbeTerminal;
   readonly grass = new Grass();
+  readonly truckDamage: TruckDamage;
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
@@ -130,6 +132,7 @@ export class Game {
     this.scene.add(this.probes.group, this.windDebris.mesh, this.headlamp, this.headlamp.target, this.grass.mesh);
     this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
     this.terminal = new ProbeTerminal(uiRoot);
+    this.truckDamage = new TruckDamage(this.parts.root);
     this.probes.onProgram = (d) => this.terminal.show(d.id, () => this.probes.arm(d));
     this.vehicle.onRighted = () => {
       if (this.state === 'playing') this.ui.toast('You rock the truck back onto its wheels.', 'info', 4000);
@@ -208,7 +211,9 @@ export class Game {
       }
       this.audio.impact(strength > 0.5 ? 'body' : 'debris', strength, pos);
     };
-    this.vehicle.onImpact = (strength, kind) => {
+    this.vehicle.onImpact = (strength, kind, local) => {
+      // Dents: landings show from ~7 m/s, crashes from ~5 m/s.
+      this.truckDamage.add(local, (strength - (kind === 'ground' ? 7 : 5)) / 18);
       // Being carried by the vortex is survivable; being slammed down or into something isn't.
       if (!this.onFoot && this.inVortexTime > 0 && (kind === 'ground' ? strength > 22 : strength > 18)) this.driverKilled = true;
       this.audio.impact(kind === 'collision' ? 'collision' : 'body', Math.min(1, strength / 15));
@@ -240,6 +245,7 @@ export class Game {
     this.windshield.clear();
     this.recorder.reset();
     this.probes.reset();
+    this.truckDamage.clear();
     this.terminal.close();
     this.windDebris.clear();
     this.radar.reset();
@@ -435,8 +441,8 @@ export class Game {
     }
     // The chaser's body: animated from his speed and the wind; the bodycam rides its chest mount.
     const speedOnFoot = Math.hypot(this.walker.vel.x, this.walker.vel.z);
-    this.body.update(sdt, this.onFoot && !this.walker.dead, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain, this.probes.carrying);
-    if (this.onFoot && this.body.chestCamPosition(_v)) {
+    this.body.update(sdt, this.onFoot && !this.walker.dead && !this.walker.caught, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain, this.probes.carrying);
+    if (this.onFoot && !this.walker.caught && this.body.chestCamPosition(_v)) {
       // Sit the lens just proud of the jacket; looking down, the wearer leans
       // forward over his feet so the jacket, legs and boots come into frame.
       const lean = this.probes.carrying ? 0 : THREE.MathUtils.clamp((-this.rig.torsoPitch - 0.5) / 0.8, 0, 1);
@@ -459,6 +465,7 @@ export class Game {
         ? {
             eye: this.walker.eye, bob: this.walker.bob, moving: this.walker.moving, animated: this.body.loaded,
             sway: this.body.chestSway(_qSway) ? _eSway.setFromQuaternion(_qSway, 'YXZ') : null,
+            tumble: this.walker.caught ? this.walker.tumble : null,
           }
         : null,
       mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0, wheel: playing ? inp.wheel : 0,
@@ -505,6 +512,7 @@ export class Game {
     atmo.uWind.value.set(this.windAtCam.x, this.windAtCam.z);
     this.windDebris.update(playing ? sdt : 0, cam.position, this.windAtCam);
     this.grass.update(cam.position, this.vehicleObj);
+    this.truckDamage.update(this.vehicleObj);
     this.terrain.update(cam, this.renderer.renderHeight);
     this.tornadoes.renderer.update(t, this.time, cam.position, this.lighting.sky, 1 - L.sunBlocked, this.lightning.flash);
 
@@ -649,7 +657,7 @@ export class Game {
       });
     }
     // E works the liftgate and probes on foot; otherwise E/F are the door.
-    const usedE = inp.wasPressed('KeyE') && this.onFoot && !this.walker.dead && !this.body.busy &&
+    const usedE = inp.wasPressed('KeyE') && this.onFoot && !this.walker.dead && !this.walker.caught && !this.body.busy &&
       this.probes.interact(this.walker.pos, this.rig.torsoYaw, this.body.carryPoint, (touchdown) => this.body.playPlace(touchdown));
     if (!usedE && (inp.wasPressed('KeyF') || inp.wasPressed('KeyE'))) this.toggleOnFoot(inp.wasPressed('KeyF'));
   }
@@ -791,6 +799,7 @@ export class Game {
       else if (!this.onFoot) goal = 'Stop in its path and get out (F)';
       else goal = 'Grab a probe from the back of the truck (E at the liftgate)';
     } else goal = 'Film the tornado (Q) and stay alive';
+    if (this.onFoot && this.walker.caught) goal = '';
     if (P.available) objective.push(`PROBES  ${armed}/4 ARMED${unarmed ? `  ·  ${unarmed} NOT PROGRAMMED` : ''}`);
     if (v.destroyed) objective.push('TRUCK WRECKED');
     const warning = '';
@@ -910,7 +919,7 @@ export class Game {
 function randomStart(station: { x: number; z: number; heading: number }): { x: number; z: number; heading: number } {
   if (Math.random() < 0.2) return station;
   const lim = MAP_HALF - 250;
-  const roads = [-1, 0, 1].filter((k) => Math.abs(k * MILE) < MAP_HALF);
+  const roads = [-1, 0, 1].filter((k) => Math.abs(k * MILE) <= MAP_HALF);
   const k = roads[Math.floor(Math.random() * roads.length)] * MILE;
   // Keep clear of the crossroads themselves.
   let along = (Math.random() * 2 - 1) * lim;
