@@ -230,6 +230,14 @@ export class AudioSystem {
     this.safe(() => this.g?.shots.door(open));
   }
 
+  grassRip(): void {
+    this.safe(() => this.g?.shots.grassRip());
+  }
+
+  grassGrab(): void {
+    this.safe(() => this.g?.shots.grassGrab());
+  }
+
   recordBeep(start: boolean): void {
     this.safe(() => this.g?.shots.recordBeep(start));
   }

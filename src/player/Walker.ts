@@ -45,6 +45,16 @@ export class Walker {
     this.stillTime = 0;
   }
 
+  /** Torn loose by the vortex at `vel` (m/s): from here the wind has him. */
+  liftOff(vel: THREE.Vector3): void {
+    if (vel !== this.vel) this.vel.copy(vel);
+    this.caught = true;
+    this.caughtTime = 0;
+    this.airTime = 0;
+    this.spin.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 6);
+    this.tumble.set(0, 0, 0);
+  }
+
   /** In the vortex: the wind carries him; gravity and the ground do the rest. */
   private updateCaught(dt: number, wind: THREE.Vector3): void {
     this.caughtTime += dt;
@@ -140,12 +150,7 @@ export class Walker {
     }
     if (w > 50 || wind.y > 22) {
       // Lifted off his feet.
-      this.caught = true;
-      this.caughtTime = 0;
-      this.airTime = 0;
-      this.vel.set(wind.x * 0.4, 6, wind.z * 0.4);
-      this.spin.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 6);
-      this.tumble.set(0, 0, 0);
+      this.liftOff(this.vel.set(wind.x * 0.4, 6, wind.z * 0.4));
       return;
     }
 

@@ -214,6 +214,15 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   warning polygon, and target selection.
 - **On foot:** get out (F), walk or run, wind pushes you, and you can be
   killed in the core.
+- **Hold on (Z):** with a tornado close and grass underfoot (not road,
+  gravel, plowed dirt or the gas station), drop flat, fists in the grass,
+  head into the wind. From ~24 m/s the wind lifts his legs until he's
+  streaming off his hands like a flag (procedural pose: IK arms, clenched
+  fingers, kicking legs; head-level view, mouse to look back at the
+  funnel). Every few seconds a hand rips out with a clod of grass: slow
+  motion, red vignette, and 0.9–1.8 s (less the harder it pulls) to aim at
+  one of the glowing patches within reach and click. Miss and he's torn
+  off into the vortex. Z gets him up once the wind has dropped.
 - **Audio:** procedural world sound with inside/outside muffling and spatial
   panning; recorded menu music and screams.
 - **UI:** main menu, settings (graphics, camera, controls, audio, units),

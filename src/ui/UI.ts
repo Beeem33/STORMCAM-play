@@ -94,6 +94,12 @@ export class UI {
         <div class="osd" data-r="osd"></div>
         <div class="prompt hidden" data-r="prompt"></div>
         <div class="center hidden" data-r="center"></div>
+        <div class="grabfx hidden" data-r="grabfx"></div>
+        <div class="grab hidden" data-r="grab">
+          <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="bar" data-r="grabBar" cx="50" cy="50" r="44" pathLength="100"/></svg>
+          <div class="cross"></div>
+          <div class="label">GRAB THE GRASS</div>
+        </div>
       </div>`);
     this.toasts = this.hud.querySelector('.toasts')!;
     this.hud.querySelectorAll<HTMLElement>('[data-r]').forEach((n) => (this.refs[n.dataset.r!] = n));
@@ -192,6 +198,18 @@ export class UI {
     const d = this.career.data;
     this.refs.career = this.menu.querySelector('[data-r=career]')!;
     this.refs.career.textContent = `DAY ${d.day}  ·  ${money(d.money)}  ·  ${d.tornadoesFilmed} TORNADOES FILMED`;
+  }
+
+  /** The grab window while holding on: `left` 0..1 of the time remaining (null hides it). */
+  setGrab(left: number | null, hover: boolean): void {
+    const g = this.refs.grab;
+    g.classList.toggle('hidden', left === null);
+    this.refs.grabfx.classList.toggle('hidden', left === null);
+    if (left === null) return;
+    this.refs.grabfx.classList.toggle('urgent', left < 0.35);
+    g.classList.toggle('hover', hover);
+    g.classList.toggle('urgent', left < 0.35);
+    this.refs.grabBar.style.strokeDashoffset = String(100 * (1 - left));
   }
 
   showHud(): void {
@@ -319,7 +337,7 @@ export class UI {
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
       ['1 / 2 / 3, wheel', 'Camera / radar tablet / flashlight (again to put away)'], ['Left click', 'Use the item: film, flashlight'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / program / pick up probes'], ['L', 'Headlights / head torch on foot'],
       ['R', 'Weather radar'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
-      ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Hold RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
+      ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Hold RMB', 'Zoom (bodycam)'], ['Z', 'Tornado close: get down and hold on to the grass'], ['Esc', 'Pause'],
     ];
     const p = this.openPanel(el(`<div class="panel"><h2>Controls</h2><div class="keys">${keys
       .map(([k, d]) => `<span class="k">${k}</span><span>${d}</span>`)

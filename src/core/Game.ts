@@ -10,6 +10,7 @@ import { Vehicle, type DriveInput } from '../vehicle/Vehicle';
 import { Windshield } from '../vehicle/Windshield';
 import { CameraRig, LENSES } from '../camera/CameraRig';
 import { Walker } from '../player/Walker';
+import { GrassHold, grippable } from '../player/GrassHold';
 import { PlayerBody } from '../player/PlayerBody';
 import { ProbeSystem } from '../gameplay/Probes';
 import { WindDebris } from '../weather/WindDebris';
@@ -40,6 +41,7 @@ export type GameState = 'menu' | 'playing' | 'paused' | 'report';
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _qSway = new THREE.Quaternion();
+const _flat = new THREE.Vector4();
 const _eSway = new THREE.Euler();
 /** Chase days start at 4:12 PM local time. */
 const DAY_START_SECONDS = 16 * 3600 + 12 * 60;
@@ -47,6 +49,9 @@ const DAY_START_SECONDS = 16 * 3600 + 12 * 60;
 const MENU_TRUCK = { x: 6, z: -380, heading: 0 };
 const MENU_TORNADO = { x: 330, z: -820 };
 const MENU_CAM = { swing: 0.22, dist: 13, height: 1.9, lookAlong: 0.5, lookUp: 55, frameShift: 0.2, fov: 58 };
+
+/** Game speed while a hand is torn loose and he's grabbing for the grass. */
+const GRAB_SLOWMO = 0.35;
 
 /** Main menu music, from the intro's PLAY until the chase starts. */
 const MENU_MUSIC = `${import.meta.env.BASE_URL}audio/menu-theme.mp3`;
@@ -86,6 +91,8 @@ export class Game {
   readonly windshield: Windshield;
   readonly rig = new CameraRig();
   readonly walker = new Walker();
+  /** Flat on the grass, hanging on as the tornado passes (Z). */
+  readonly hold = new GrassHold();
   readonly body = new PlayerBody();
   readonly weather = new WeatherSystem();
   readonly precip = new Precipitation();
@@ -165,7 +172,7 @@ export class Game {
     this.missiles = new Missiles(this.tornadoes.debris);
     this.breakables = new BreakableParts(this.parts.root, this.vehicleObj, this.tornadoes.debris);
     this.traffic = new Traffic(this.world.colliders, this.tornadoes.debris);
-    this.scene.add(this.traffic.group);
+    this.scene.add(this.traffic.group, this.hold.group);
     this.traffic
       .load()
       .then(() => this.traffic.scatter(this.vehicle.pos))
@@ -339,6 +346,7 @@ export class Game {
     this.windshield.clear();
     this.recorder.reset();
     this.probes.reset();
+    this.hold.reset();
     this.truckDamage.clear();
     this.inventory.reset();
     this.traffic.scatter(this.vehicle.pos);
@@ -445,7 +453,7 @@ export class Game {
 
   /** Hands busy (carrying, programming, thrown about) or not playing: no item in view. */
   private get itemsHidden(): boolean {
-    return this.state !== 'playing' || this.probes.carrying || this.terminal.open || this.body.busy || this.walker.caught || this.walker.dead;
+    return this.state !== 'playing' || this.probes.carrying || this.terminal.open || this.body.busy || this.walker.caught || this.walker.dead || this.hold.active;
   }
 
   /**
@@ -774,6 +782,9 @@ export class Game {
 
   // ------------------------------------------------------------------ frame
   frame(dt: number): void {
+    // A hand tears loose: the world drops into slow motion while he grabs for the grass.
+    const realDt = dt;
+    if (this.state === 'playing' && this.hold.grabbing) dt *= GRAB_SLOWMO;
     const playing = this.state === 'playing';
     const simulate = playing || this.state === 'menu';
     const sdt = simulate ? dt : 0;
@@ -832,7 +843,8 @@ export class Game {
       this.tornadoes.windAt(_v.copy(this.walker.pos).setY(this.walker.pos.y + 1), _w).add(L.wind);
       const yawCar = this.vehicle.heading;
       this.walker.car = { x: this.vehicle.pos.x, z: this.vehicle.pos.z, rot: -yawCar, hx: 1.0, hz: 2.55 };
-      this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w);
+      if (this.hold.active) this.updateHold(sdt, realDt, _w);
+      else this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w);
       if (!this.walker.caught) this.keepInChaseArea(this.walker.pos, this.walker.vel);
       if (this.walker.caught) this.vortexRide(sdt, t);
       if (this.walker.caught) {
@@ -842,8 +854,10 @@ export class Game {
     }
     // The chaser's body: animated from his speed and the wind; the bodycam rides its chest mount.
     const speedOnFoot = Math.hypot(this.walker.vel.x, this.walker.vel.z);
-    this.body.update(sdt, this.onFoot && !this.walker.dead && !this.walker.caught, this.walker.pos, this.rig.torsoYaw, speedOnFoot, this.walker.strain, this.probes.carrying);
-    if (this.onFoot && !this.walker.caught && this.body.chestCamPosition(_v)) {
+    const holding = this.hold.active && this.onFoot;
+    this.body.update(sdt, this.onFoot && !this.walker.dead && !this.walker.caught, this.walker.pos, this.rig.torsoYaw, holding ? 0 : speedOnFoot, holding ? 0 : this.walker.strain, this.probes.carrying);
+    if (holding) this.body.poseHold(this.hold.pose);
+    if (this.onFoot && !this.walker.caught && !holding && this.body.chestCamPosition(_v)) {
       // Sit the lens just proud of the jacket; looking down, the wearer leans
       // forward over his feet so the jacket, legs and boots come into frame.
       const lean = this.probes.carrying ? 0 : THREE.MathUtils.clamp((-this.rig.torsoPitch - 0.5) / 0.8, 0, 1);
@@ -864,7 +878,7 @@ export class Game {
             tumble: this.walker.caught ? this.walker.tumble : null,
           }
         : null,
-      mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0,
+      mouseDX: playing && !this.terminal.open && !holding ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open && !holding ? inp.mouseDY : 0,
       zoomHeld: playing && inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
       shake: this.onFoot && eff.tripod && this.walker.stillTime > 1.5 ? shake * 0.1 : shake,
       fov: this.settings.data.fov, wind: this.windAtCam.length(), impulse: this.shakeImpulse,
@@ -872,6 +886,16 @@ export class Game {
     });
     const cam = this.rig.camera;
     if (this.state === 'menu') this.menuDrone(dt);
+    if (holding && this.body.eyePosition(_v)) {
+      // Head view while down: the lens rides his head down; the aim eases over from the bodycam's.
+      const b = this.hold.pose.blend;
+      _qSway.copy(cam.quaternion);
+      this.hold.cameraPose(_v, cam, this.settings.data.cameraShake, this.shakeImpulse);
+      cam.quaternion.slerpQuaternions(_qSway, cam.quaternion.clone(), b);
+      cam.fov = this.settings.data.bodycamFov;
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+    }
     // The held item rides in front of the lens (hidden while the hands are busy).
     this.inventory.update(dt, cam, this.recorder.recording, this.recorder.current?.duration ?? 0, this.itemsHidden);
     if (this.inventory.tabletShown && (this.tabletTimer -= dt) <= 0) {
@@ -928,7 +952,10 @@ export class Game {
     atmo.uWetness.value = this.weather.wetness;
     atmo.uWind.value.set(this.windAtCam.x, this.windAtCam.z);
     this.windDebris.update(sdt, cam.position, this.windAtCam);
-    this.grass.update(cam.position, this.vehicleObj);
+    const hp = this.hold.pose;
+    this.grass.update(cam.position, this.vehicleObj, this.hold.active && this.onFoot
+      ? _flat.set(hp.shoulders.x - hp.headDir.x * 0.5, hp.shoulders.z - hp.headDir.z * 0.5, 2.2, hp.blend)
+      : null);
     this.truckDamage.update(this.vehicleObj);
     this.terrain.update(cam, this.renderer.renderHeight);
     this.tornadoes.renderer.update(t, this.time, cam.position, this.lighting.sky, 1 - L.sunBlocked, this.lightning.flash);
@@ -1020,6 +1047,56 @@ export class Game {
     }
   }
 
+  /** Close enough to a tornado that getting flat and holding on (Z) is on offer. */
+  private holdOffered(): boolean {
+    const t = this.tornadoes.tornado;
+    if (!t || t.presence < 0.4 || !this.onFoot || this.hold.active) return false;
+    if (this.walker.caught || this.walker.dead || this.probes.carrying || this.body.busy || this.terminal.open) return false;
+    return t.distanceTo(this.walker.pos) < Math.max(25, t.radius) * 7 + 150;
+  }
+
+  /**
+   * Down on the grass: the hold drives the body and view. A hand that tears
+   * loose has to be put back on a patch of grass (aim and click) in time, or
+   * the vortex takes him.
+   */
+  private updateHold(dt: number, realDt: number, wind: THREE.Vector3): void {
+    const h = this.hold;
+    const inp = this.input;
+    if (!this.terminal.open) h.look(inp.mouseDX, inp.mouseDY, 0.0022 * this.settings.data.mouseSensitivity, this.settings.data.invertY);
+    const wasActive = h.active;
+    h.update(dt, realDt, wind, inp.wasPressed('MouseLeft'), this.rig.camera, this.weather.wetness);
+    if (h.cues.rip) this.audio.grassRip();
+    if (h.cues.grab) this.audio.grassGrab();
+    if (h.cues.thud) this.audio.impact('body', 0.3);
+    if (h.cues.rip) this.shakeImpulse = Math.max(this.shakeImpulse, 0.8);
+    const w = this.walker;
+    // The walker rides along at his hips (for distances, the wind, the death report).
+    h.standSpot(w.pos);
+    w.pos.y = heightAt(w.pos.x, w.pos.z);
+    w.vel.set(0, 0, 0);
+    w.moving = 0;
+    w.strain = h.lift;
+    // Keep the bodycam where he'll stand up, facing where he's looking, so getting up eases back into it.
+    w.eye.set(w.pos.x, w.pos.y + w.camHeight, w.pos.z);
+    this.rig.yaw = Math.atan2(-h.pose.headDir.x, -h.pose.headDir.z) + h.lookYaw;
+    this.rig.pitch = 0;
+    if (h.failed) {
+      // Gone: the wind takes him off the grass and into the vortex.
+      h.failed = false;
+      h.reset();
+      w.pos.copy(h.pose.shoulders);
+      w.liftOff(_v.set(wind.x * 0.5, 8 + Math.max(0, wind.y) * 0.5, wind.z * 0.5));
+      this.shakeImpulse = 1;
+    } else if (wasActive && !h.active) {
+      // Back on his feet, facing where he was looking.
+      w.placeAt(w.pos.x, w.pos.z);
+      this.rig.setMode('bodycam');
+      this.rig.yaw = Math.atan2(-h.pose.headDir.x, -h.pose.headDir.z) + h.lookYaw;
+      this.rig.pitch = 0;
+    }
+  }
+
   /** The chase area ends a little past the perimeter roads (the barricades); push back softly. */
   private keepInChaseArea(p: THREE.Vector3, v: THREE.Vector3): void {
     const lim = MAP_HALF + 45;
@@ -1076,6 +1153,15 @@ export class Game {
         if (inp.wasPressed(code) && s) this.selectTarget(s.id);
       });
     }
+    if (inp.wasPressed('KeyZ') && this.onFoot && !this.walker.dead && !this.walker.caught) {
+      if (this.hold.active) {
+        if (this.hold.canGetUp) this.hold.getUp();
+      } else if (this.holdOffered()) {
+        this.tornadoes.windAt(_v.copy(this.walker.pos).setY(this.walker.pos.y + 0.5), _w).add(this.weather.local.wind);
+        if (!this.hold.start(this.walker.pos, this.rig.torsoYaw, _w, this.weather.wetness)) this.ui.toast('Nothing to hold on to here — get onto the grass.');
+      }
+    }
+    if (this.hold.active) return;
     // E works the liftgate and probes on foot; otherwise E/F are the door.
     const usedE = inp.wasPressed('KeyE') && this.onFoot && !this.walker.dead && !this.walker.caught && !this.body.busy &&
       this.probes.interact(this.walker.pos, this.rig.torsoYaw, this.body.carryPoint, (touchdown) => this.body.playPlace(touchdown));
@@ -1177,7 +1263,7 @@ export class Game {
     a.tornado.active = !!tor;
     a.siren = 0;
     // Screaming from the moment he's torn loose until it's over.
-    a.screaming = this.state === 'playing' && this.onFoot && (this.walker.caught || this.ejection !== null) && !this.walker.dead ? 1 : 0;
+    a.screaming = this.state === 'playing' && this.onFoot && (this.walker.caught || this.ejection !== null || this.hold.scream > 0) && !this.walker.dead ? 1 : 0;
     if (tor) {
       a.tornado.position.copy(tor.position);
       a.tornado.distance = tor.distanceTo(cam.position);
@@ -1231,6 +1317,7 @@ export class Game {
       else goal = 'Grab a probe from the back of the truck (E at the liftgate)';
     } else goal = this.recorder.recording ? 'Keep filming and stay alive' : 'Film the tornado: camcorder (1), click to record';
     if ((this.onFoot && this.walker.caught) || this.ejection) goal = '';
+    if (this.onFoot && this.hold.active) goal = this.hold.grabbing ? '' : this.hold.canGetUp ? 'The wind has dropped. Z to get up' : 'Hold on until the wind drops';
     if (P.available) objective.push(`PROBES  ${armed}/4 ARMED${unarmed ? `  ·  ${unarmed} NOT PROGRAMMED` : ''}`);
     if (v.destroyed) objective.push('TRUCK WRECKED');
     const warning = '';
@@ -1241,8 +1328,13 @@ export class Game {
       const d = this.doorWorld(new THREE.Vector3());
       if (Math.hypot(d.x - this.walker.pos.x, d.z - this.walker.pos.z) < 3.5) prompt = 'F  GET IN';
       if (!this.body.busy) prompt = this.probes.prompt(this.walker.pos) || prompt;
+      if (this.holdOffered()) {
+        prompt = grippable(this.walker.pos.x, this.walker.pos.z, this.weather.wetness) ? 'Z  GET DOWN AND HOLD ON' : 'NOTHING TO HOLD ON THE ROAD — GET ONTO THE GRASS';
+      }
+      if (this.hold.active) prompt = this.hold.canGetUp ? 'Z  GET UP' : '';
       if (this.terminal.open || this.ejection || this.walker.caught) prompt = '';
     }
+    this.ui.setGrab(this.state === 'playing' && this.hold.grabbing ? this.hold.grabLeft : null, this.hold.grabHover);
     let center = '';
     if (this.onFoot && this.walker.dead) center = 'Caught in the tornado';
 

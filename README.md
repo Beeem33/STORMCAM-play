@@ -51,6 +51,7 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | T | Dashcam timestamp overlay |
 | Right mouse (hold) | Zoom (bodycam) |
 | Shift | Run (on foot) |
+| Z | Tornado close, on grass: get flat and hold on. If a hand tears loose, aim at a glowing patch of grass and click before time runs out. Z again to get up once the wind drops |
 | Esc | Pause |
 
 ## Why not Unreal Engine 5?

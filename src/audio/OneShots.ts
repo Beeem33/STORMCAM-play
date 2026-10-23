@@ -211,6 +211,51 @@ export class OneShots {
     this.core.play(pick(open ? bank.doorOpen : bank.doorClose), bus.direct, MIX.door, { rate: rand(0.96, 1.04), pan: -0.35 });
   }
 
+  /**
+   * Grass and roots tearing out of the ground under his fist: a run of dry
+   * crackles over a ripping noise, then the clod's thump.
+   */
+  grassRip(): void {
+    const { ctx, bank, bus } = this.core;
+    const now = ctx.currentTime;
+    const rip = (when: number, dur: number, freq: number, gain: number): void => {
+      const src = ctx.createBufferSource();
+      src.buffer = bank.white;
+      src.playbackRate.value = rand(0.9, 1.1);
+      const f = makeFilter(ctx, 'bandpass', freq, 0.9);
+      const g = makeGain(ctx, 0);
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(gain, when + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0005, when + dur);
+      src.connect(f);
+      f.connect(g);
+      g.connect(bus.direct);
+      src.start(when, Math.random() * 3, dur + 0.05);
+      src.onended = () => g.disconnect();
+    };
+    rip(now, 0.32, 1800, 0.55);
+    for (let i = 0; i < 9; i++) rip(now + Math.random() * 0.28, 0.03 + Math.random() * 0.04, rand(2500, 5500), rand(0.3, 0.6));
+    rip(now + 0.05, 0.18, 300, 0.5);
+  }
+
+  /** His hand slapping down and closing on a fresh patch of grass. */
+  grassGrab(): void {
+    const { ctx, bank, bus } = this.core;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = bank.pink;
+    const f = makeFilter(ctx, 'lowpass', 1400, 0.7);
+    const g = makeGain(ctx, 0);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.8, now + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0005, now + 0.22);
+    src.connect(f);
+    f.connect(g);
+    g.connect(bus.direct);
+    src.start(now, Math.random() * 3, 0.3);
+    src.onended = () => g.disconnect();
+  }
+
   recordBeep(start: boolean): void {
     const { bank, bus } = this.core;
     this.core.play(start ? bank.beepStart : bank.beepStop, bus.direct, MIX.beep);

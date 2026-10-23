@@ -148,3 +148,19 @@ button.btn:disabled { opacity: 0.4; cursor: default; }
 .intro .studio.on { opacity: 1; }
 .intro .title { margin: 0; font-weight: 400; font-size: clamp(48px, 11vw, 120px); letter-spacing: 0.12em; text-shadow: 0 0 24px rgba(255,255,255,0.15); transform: scale(0.97); transition: opacity 5s ease, transform 8s ease-out; }
 .intro .title.on { opacity: 1; transform: scale(1); }
+
+/* ---------------------------------------------------------------- grab the grass */
+.hud .grab { position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; transform: translate(-50%, -50%); pointer-events: none; }
+.hud .grab svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.hud .grab circle { fill: none; stroke-width: 5; }
+.hud .grab .track { stroke: rgba(255,255,255,0.18); }
+.hud .grab .bar { stroke: #ffe14d; stroke-dasharray: 100; stroke-linecap: round; filter: drop-shadow(0 0 6px rgba(255,225,77,0.7)); }
+.hud .grab.urgent .bar { stroke: #ff3b2b; filter: drop-shadow(0 0 8px rgba(255,59,43,0.9)); }
+.hud .grab .cross { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 2px solid rgba(255,255,255,0.85); border-radius: 50%; }
+.hud .grab.hover .cross { border-color: #fff; background: rgba(255,255,255,0.35); box-shadow: 0 0 12px #fff; }
+.hud .grab .label { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 10px; white-space: nowrap; font: 700 16px var(--ui-font); letter-spacing: 0.2em; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.9); animation: grabPulse 0.35s ease-in-out infinite alternate; }
+.hud .grab.urgent .label { color: #ff5a4a; }
+@keyframes grabPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
+.hud .grabfx { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(110,0,0,0.55) 100%); animation: grabBeat 0.5s ease-in-out infinite alternate; }
+.hud .grabfx.urgent { animation-duration: 0.22s; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(160,0,0,0.7) 100%); }
+@keyframes grabBeat { from { opacity: 0.55; } to { opacity: 1; } }

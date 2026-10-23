@@ -20,6 +20,8 @@ export class Grass {
   private readonly uCam = { value: new THREE.Vector3() };
   /** World → vehicle local, to flatten the grass under the truck. */
   private readonly uCarInv = { value: new THREE.Matrix4() };
+  /** Grass pressed flat by the chaser lying in it: centre x, z, radius, amount 0..1. */
+  private readonly uFlat = { value: new THREE.Vector4(0, 0, 1, 0) };
 
   constructor() {
     const pos = new Float32Array(COUNT * 9);
@@ -49,6 +51,7 @@ export class Grass {
       prev(shader, renderer);
       shader.uniforms.uGrassCam = this.uCam;
       shader.uniforms.uGrassCarInv = this.uCarInv;
+      shader.uniforms.uGrassFlat = this.uFlat;
       shader.uniforms.uGrassWind = atmo.uWind;
       shader.uniforms.uGrassTime = atmo.uTime;
       shader.vertexShader = shader.vertexShader
@@ -58,6 +61,7 @@ export class Grass {
 attribute vec4 aBlade;
 uniform vec3 uGrassCam;
 uniform mat4 uGrassCarInv;
+uniform vec4 uGrassFlat;
 uniform vec2 uGrassWind;
 uniform float uGrassTime;
 ${WORLD_GLSL}
@@ -93,6 +97,8 @@ float gGrassH;`,
   if (roadClear < 1.2 || w_padDistance(wp) < 2.0) H = 0.0;
   vec3 carL = (uGrassCarInv * vec4(wp.x, 0.0, wp.y, 1.0)).xyz;
   if (abs(carL.x) < 1.25 && abs(carL.z) < 2.9) H = 0.0; // flattened under the truck
+  // Pressed flat where he's lying in it.
+  H *= 1.0 - 0.8 * uGrassFlat.w * (1.0 - smoothstep(uGrassFlat.z * 0.6, uGrassFlat.z, length(wp - uGrassFlat.xy)));
   H *= (0.55 + 0.7 * r) * keep;
   gGrassH = H;
   // Dark down in the stand, lit at the tips.
@@ -131,8 +137,11 @@ float gGrassH;`,
     this.mesh.matrixAutoUpdate = false;
   }
 
-  update(cam: THREE.Vector3, car: THREE.Object3D): void {
+  /** @param flat where the chaser is lying in the grass (x, z, radius, amount), or null */
+  update(cam: THREE.Vector3, car: THREE.Object3D, flat: THREE.Vector4 | null = null): void {
     this.uCam.value.copy(cam);
+    if (flat) this.uFlat.value.copy(flat);
+    else this.uFlat.value.w = 0;
     // Only the horizontal footprint matters: ignore the car's pitch, roll and height.
     const yaw = Math.atan2(car.matrixWorld.elements[8], car.matrixWorld.elements[10]);
     this.uCarInv.value.makeRotationY(yaw).setPosition(car.position.x, 0, car.position.z).invert();
