@@ -61,6 +61,23 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   picked up and carried by the vortex's wind field, tumbling (the camera
   spins with him), for up to ~7 s before it kills him, or sooner if he's
   slammed into the ground.
+- **Inventory:** three hand-held items, body-cam style with nothing on the
+  HUD: 1/2/3 or the mouse wheel raise one into the bottom of the shot (again
+  to put it away). 1 camcorder (click to film; its flip screen shows REC and
+  the clip time, and the HUD's REC readout appears only while rolling),
+  2 rugged tablet with the live radar, 3 flashlight (click for the beam).
+- **Roadside vehicles:** ~10 abandoned sedans and farm pickups (random
+  paint, some in the ditch) and 2–3 police cruisers with flashing light bars
+  are scattered on the shoulders each day (`public/models/traffic.glb`,
+  `models/traffic_build.py`). They block the truck until the tornado's winds
+  reach them, then they're carried up (~100 ft) and hurled as heavy debris
+  that can hit you.
+- **Handling:** speed-sensitive steering, stability control (yaw held near
+  what the tyres can deliver), anti-roll, and a sideways-slide scrub: full
+  lock at 60+ mph gives a controlled turn with a few mph of slip instead of
+  a long slide or a rollover; off-road grip raised a little.
+- **Thrown on foot:** a caught chaser bounces off buildings, trees and the
+  truck below roof height instead of passing through them.
 - **Flying missiles:** within ~3 vortex-widths the air fills with junk flung
   across the truck's path from upwind (boards, roofing sheets, fence posts,
   oil drums, limbs, now and then a round bale), more the closer you are.
@@ -113,8 +130,9 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   debris fragments are ripped up and lofted; tree crowns are torn off and
   thrown, the strongest winds uproot whole trees, and telephone poles snap
   and fly (up to 160 large thrown objects at once).
-- **Day pacing:** the day's main storm starts mature about 3 km upstream on a
-  track that crosses the start area, and drops its tornado about 10 s in.
+- **Day pacing:** the day's main storm is built at a random spot inside the
+  chase area at least 1 km from the player, and drops its tornado about
+  10 s in.
   Tornadoes form over 30 s and stay mature for 7–12 minutes.
 - **Vehicle:** raycast suspension on the terrain function, slip-based tyre
   grip that varies by surface and wetness, a 4-speed automatic with reverse

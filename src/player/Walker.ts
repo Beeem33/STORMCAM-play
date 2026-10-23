@@ -53,6 +53,22 @@ export class Walker {
     this.vel.y += (Math.random() - 0.4) * 20 * dt;
     this.vel.z += (Math.random() - 0.5) * 30 * dt;
     this.pos.addScaledVector(this.vel, dt);
+    // Buildings, trees and the truck: below roof height he bounces off them instead of passing through.
+    if (this.pos.y - heightAt(this.pos.x, this.pos.z) < 10) {
+      const bx = this.pos.x, bz = this.pos.z;
+      this.resolve();
+      const dx = this.pos.x - bx, dz = this.pos.z - bz;
+      const d = Math.hypot(dx, dz);
+      if (d > 1e-4) {
+        const nx = dx / d, nz = dz / d;
+        const vn = this.vel.x * nx + this.vel.z * nz;
+        if (vn < 0) {
+          this.vel.x -= 1.5 * vn * nx;
+          this.vel.z -= 1.5 * vn * nz;
+          this.vel.multiplyScalar(0.7);
+        }
+      }
+    }
     const g = heightAt(this.pos.x, this.pos.z);
     if (this.pos.y < g) {
       const hit = -this.vel.y;

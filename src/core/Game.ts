@@ -18,6 +18,8 @@ import { Grass } from '../environment/Grass';
 import { TruckDamage } from '../vehicle/TruckDamage';
 import { Missiles } from '../tornado/Missiles';
 import { BreakableParts } from '../vehicle/BreakableParts';
+import { Inventory } from '../player/Inventory';
+import { Traffic } from '../environment/Traffic';
 import { Input } from './Input';
 import { Settings } from './Settings';
 import { WeatherSystem } from '../weather/WeatherSystem';
@@ -67,6 +69,9 @@ export class Game {
   readonly truckDamage: TruckDamage;
   readonly missiles: Missiles;
   readonly breakables: BreakableParts;
+  readonly inventory = new Inventory();
+  readonly traffic: Traffic;
+  private tabletTimer = 0;
   readonly parts: VehicleParts;
   readonly vehicle = new Vehicle();
   readonly vehicleObj = new THREE.Group();
@@ -139,12 +144,18 @@ export class Game {
     this.windshield = new Windshield(this.parts);
     this.vehicle.colliders = this.world.query;
     this.probes = new ProbeSystem(this.parts, this.tornadoes);
-    this.scene.add(this.probes.group, this.windDebris.mesh, this.headlamp, this.headlamp.target, this.grass.mesh);
+    this.scene.add(this.probes.group, this.windDebris.mesh, this.headlamp, this.headlamp.target, this.grass.mesh, this.inventory.group);
     this.probes.onEvent = (text, kind) => this.ui.toast(text, kind);
     this.terminal = new ProbeTerminal(uiRoot);
     this.truckDamage = new TruckDamage(this.parts.root);
     this.missiles = new Missiles(this.tornadoes.debris);
     this.breakables = new BreakableParts(this.parts.root, this.vehicleObj, this.tornadoes.debris);
+    this.traffic = new Traffic(this.world.colliders, this.tornadoes.debris);
+    this.scene.add(this.traffic.group);
+    this.traffic
+      .load()
+      .then(() => this.traffic.scatter(this.vehicle.pos))
+      .catch((e) => console.warn('[traffic] roadside vehicles unavailable', e));
     const partLabel: Record<string, string> = { Hood: 'hood', BrushGuard: 'brush guard', RoofRack: 'roof rack', Mirrors: 'mirrors', Mirror_L: 'left mirror', Mirror_R: 'right mirror', Bumper_F: 'front bumper', Bumper_R: 'rear bumper', Anemometer: 'anemometer', Door_FL: "driver's door", Door_FR: 'passenger door', Door_RL: 'rear left door', Door_RR: 'rear right door' };
     this.breakables.onBreak = (name) => {
       if (this.state === 'playing') this.ui.toast(`The ${partLabel[name] ?? name.replace(/_/g, ' ').toLowerCase()} tore off!`, 'alert', 3000);
@@ -300,6 +311,8 @@ export class Game {
     this.recorder.reset();
     this.probes.reset();
     this.truckDamage.clear();
+    this.inventory.reset();
+    this.traffic.scatter(this.vehicle.pos);
     this.breakables.reset();
     this.terminal.close();
     this.windDebris.clear();
@@ -389,6 +402,11 @@ export class Game {
       const over = Math.abs(t.position[axis]) - hard;
       if (over > 0) s[axis] -= Math.sign(t.position[axis]) * Math.min(over, 30 * dt);
     }
+  }
+
+  /** Hands busy (carrying, programming, thrown about) or not playing: no item in view. */
+  private get itemsHidden(): boolean {
+    return this.state !== 'playing' || this.probes.carrying || this.terminal.open || this.body.busy || this.walker.caught || this.walker.dead;
   }
 
   /** How high the tornado has thrown the truck; coming down from that height is fatal. */
@@ -610,6 +628,7 @@ export class Game {
     this.probes.update(playing ? sdt : 0);
     if (playing) this.keepTornadoInside(sdt);
     this.missiles.update(playing ? sdt : 0, this.tornadoes.tornado, this.vehicle.pos, playing && !this.onFoot);
+    this.traffic.update(sdt, this.tornadoes.tornado);
     if (this.terminal.open && (!this.onFoot || this.walker.dead || this.state !== 'playing')) this.terminal.close();
     const L = this.weather.local;
     const t = this.tornadoes.tornado;
@@ -677,7 +696,7 @@ export class Game {
             tumble: this.walker.caught ? this.walker.tumble : null,
           }
         : null,
-      mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0, wheel: playing ? inp.wheel : 0,
+      mouseDX: playing && !this.terminal.open ? inp.mouseDX : 0, mouseDY: playing && !this.terminal.open ? inp.mouseDY : 0, wheel: 0,
       zoomHeld: inp.mouseRight, sensitivity: this.settings.data.mouseSensitivity, invertY: this.settings.data.invertY,
       shake: this.onFoot && eff.tripod && this.walker.stillTime > 1.5 ? shake * 0.1 : shake,
       fov: this.settings.data.fov, wind: this.windAtCam.length(), impulse: this.shakeImpulse,
@@ -685,10 +704,27 @@ export class Game {
     });
     const cam = this.rig.camera;
     if (this.state === 'menu') this.menuDrone(dt);
-    // Head torch rides just above the lens and points where the chaser looks.
-    const lamp = this.onFoot && this.headlampOn && !this.walker.dead;
+    // The held item rides in front of the lens (hidden while the hands are busy).
+    this.inventory.update(dt, cam, this.recorder.recording, this.recorder.current?.duration ?? 0, this.itemsHidden);
+    if (this.inventory.tabletShown && (this.tabletTimer -= dt) <= 0) {
+      this.tabletTimer = 0.25;
+      const ctx = this.inventory.tabletCanvas.getContext('2d')!;
+      const f = this.onFoot ? this.walker.pos : this.vehicle.pos;
+      const tor = this.tornadoes.tornado;
+      if (!this.radar.scan) this.radar.forceScan();
+      this.radar.draw(ctx, this.inventory.tabletCanvas.width, { x: f.x, z: f.z, heading: this.onFoot ? -this.rig.yaw : this.vehicle.heading }, (s) => this.clock(s), tor && tor.presence > 0.2 ? { x: tor.position.x, z: tor.position.z } : null);
+      this.inventory.markTabletDirty();
+    }
+    // Head torch rides just above the lens; the hand flashlight shines from its lens.
+    const torch = this.inventory.flashlightOn && this.inventory.item === 'flashlight' && this.inventory.lensPose(_v, _w);
+    const lamp = (this.onFoot && this.headlampOn && !this.walker.dead) || torch;
     this.headlamp.visible = lamp;
-    if (lamp) {
+    if (torch) {
+      this.headlamp.intensity = 420;
+      this.headlamp.position.copy(_v);
+      this.headlamp.target.position.copy(_v).addScaledVector(_w, 12);
+      this.headlamp.target.updateMatrixWorld();
+    } else if (lamp) {
       this.headlamp.intensity = 260;
       this.headlamp.position.copy(cam.position).y += 0.35;
       this.rig.forward(this.headlamp.target.position).multiplyScalar(12).add(cam.position);
@@ -836,9 +872,15 @@ export class Game {
     const inp = this.input;
     // The probe programmer owns the keyboard while it's open.
     if (this.terminal.open) return;
-    if (inp.wasPressed('KeyQ')) {
-      const on = this.recorder.toggle(this.time);
-      this.audio.recordBeep(on);
+    // Inventory: 1/2/3 or the wheel to pick an item, left click to use it.
+    if (!this.radarOpen) ['Digit1', 'Digit2', 'Digit3'].forEach((code, k) => inp.wasPressed(code) && this.inventory.select(k));
+    if (inp.wheel !== 0) this.inventory.scroll(Math.sign(inp.wheel));
+    if (inp.wasPressed('MouseLeft') && !this.itemsHidden) {
+      const item = this.inventory.item;
+      if (item === 'camera') {
+        const on = this.recorder.toggle(this.time);
+        this.audio.recordBeep(on);
+      } else if (item === 'flashlight') this.inventory.flashlightOn = !this.inventory.flashlightOn;
     }
     if (inp.wasPressed('KeyC') && !this.onFoot) this.rig.setMode(this.rig.mode === 'driver' ? 'dashcam' : 'driver');
     if (inp.wasPressed('KeyX')) {
@@ -1016,7 +1058,7 @@ export class Game {
       if (!ahead) goal = 'Get ahead of the tornado';
       else if (!this.onFoot) goal = 'Stop in its path and get out (F)';
       else goal = 'Grab a probe from the back of the truck (E at the liftgate)';
-    } else goal = 'Film the tornado (Q) and stay alive';
+    } else goal = this.recorder.recording ? 'Keep filming and stay alive' : 'Film the tornado: camcorder (1), click to record';
     if (this.onFoot && this.walker.caught) goal = '';
     if (P.available) objective.push(`PROBES  ${armed}/4 ARMED${unarmed ? `  ·  ${unarmed} NOT PROGRAMMED` : ''}`);
     if (v.destroyed) objective.push('TRUCK WRECKED');

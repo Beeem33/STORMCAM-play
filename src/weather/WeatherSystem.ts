@@ -9,6 +9,7 @@ import {
   type StormStage,
 } from './StormModel';
 import { mulberry32 } from '../utils/Random';
+import { MAP_HALF } from '../environment/WorldShape';
 import { clamp, damp, smoothstep } from '../utils/MathUtils';
 
 /** Weather at one point, sampled each frame for the player. */
@@ -82,8 +83,17 @@ export class WeatherSystem {
         lateral = side * (3600 + r() * 1200);
         side = -side;
       }
-      const x = start.x - fx * upstream + -fz * lateral;
-      const z = start.z - fz * upstream + fx * lateral;
+      let x = start.x - fx * upstream + -fz * lateral;
+      let z = start.z - fz * upstream + fx * lateral;
+      if (lead) {
+        // The tornado must touch down inside the chase area: pick a spot well
+        // inside it, at least ~1 km from the player, and build the storm there.
+        for (let tries = 0; tries < 20; tries++) {
+          x = (r() * 2 - 1) * MAP_HALF * 0.55;
+          z = (r() * 2 - 1) * MAP_HALF * 0.55;
+          if (Math.hypot(x - start.x, z - start.z) > 1000) break;
+        }
+      }
       const tornadic = lead || r() < 0.18;
       const s: StormCell = {
         id: i + 1,

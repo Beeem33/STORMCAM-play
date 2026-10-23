@@ -260,7 +260,7 @@ export class UI {
   showControls(back?: () => void): void {
     const keys: [string, string][] = [
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
-      ['Q', 'Start / stop recording'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / program / pick up probes'], ['L', 'Headlights / head torch on foot'],
+      ['1 / 2 / 3, wheel', 'Camera / radar tablet / flashlight (again to put away)'], ['Left click', 'Use the item: film, flashlight'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / program / pick up probes'], ['L', 'Headlights / head torch on foot'],
       ['R', 'Weather radar'], ['M', 'GPS map'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
       ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Wheel / RMB', 'Zoom (bodycam)'], ['Esc', 'Pause'],
     ];
@@ -311,7 +311,7 @@ export class UI {
               <td class="num">${money(c.value)}</td></tr>`,
           )
           .join('')
-      : `<tr><td colspan="5" class="ev">No usable footage recorded. Press Q to record when you have the storm in view.</td></tr>`;
+      : `<tr><td colspan="5" class="ev">No usable footage recorded. Take out the camcorder (1) and click to film when you have the storm in view.</td></tr>`;
     const p = this.openPanel(el(`<div class="panel report" style="width:min(720px, calc(100vw - 32px))"><h2>Day ${r.day} · ${r.outcome}</h2>
       <table><tr><th>Clip</th><th>Length</th><th>Grade</th><th>Highlights</th><th class="num">Sale</th></tr>${rows}</table>
       <div class="total"><span>Footage sold</span><span class="pos">${money(r.footage)}</span></div>
@@ -359,9 +359,12 @@ export class UI {
   // ------------------------------------------------------------------ HUD
   updateHud(h: HudState): void {
     const r = this.refs;
-    this.hud.querySelector('.rec')!.classList.toggle('on', h.recording);
-    r.recLabel.textContent = h.recording ? 'REC' : 'STBY';
-    r.recTime.textContent = h.recording ? fmtTime(h.clipTime) : 'Q TO RECORD';
+    // Only a REC readout while rolling; nothing on screen otherwise.
+    const rec = this.hud.querySelector('.rec')!;
+    rec.classList.toggle('on', h.recording);
+    rec.classList.toggle('hidden', !h.recording);
+    r.recLabel.textContent = 'REC';
+    r.recTime.textContent = fmtTime(h.clipTime);
     r.goal.textContent = h.goal;
     r.pointer.classList.toggle('hidden', !h.pointer);
     if (h.pointer) {

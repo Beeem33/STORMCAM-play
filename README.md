@@ -40,7 +40,8 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | A / D | Steer |
 | Space | Handbrake |
 | Mouse | Look around (driver and on foot) |
-| Q | Start / stop recording |
+| 1 / 2 / 3 or mouse wheel | Pick an item: camcorder, radar tablet, flashlight (press again to put it away) |
+| Left click | Use the item: start/stop filming, flashlight on/off |
 | C | Switch camera: driver ↔ dashcam |
 | F | Get out of / back into the vehicle |
 | E | At the liftgate: open it, take or return a probe. On foot: set a probe down, program it (type the answers on the keypad), or pick it up |
@@ -49,7 +50,7 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | X | Wipers: auto / off / low / high |
 | L | Headlights (in the truck) / head torch (on foot) |
 | T | Dashcam timestamp overlay |
-| Mouse wheel / right mouse | Zoom (bodycam) |
+| Right mouse | Zoom (bodycam) |
 | Shift | Run (on foot) |
 | Esc | Pause |
 

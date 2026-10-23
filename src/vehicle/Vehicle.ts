@@ -33,8 +33,8 @@ interface Wheel {
 const MU: Record<SurfaceKind, [number, number]> = {
   asphalt: [1.0, 0.72],
   gravel: [0.68, 0.55],
-  grass: [0.55, 0.38],
-  mud: [0.42, 0.3],
+  grass: [0.62, 0.45],
+  mud: [0.48, 0.36],
 };
 /** Rolling-resistance coefficient (fraction of wheel load). Chase trucks run aired-down M/T tyres. */
 const ROLL_RES: Record<SurfaceKind, number> = { asphalt: 0.013, gravel: 0.022, grass: 0.045, mud: 0.07 };
@@ -227,7 +227,8 @@ export class Vehicle {
     const rate = Math.abs(target) > Math.abs(this.steerInput) ? 2.6 : 4.5;
     this.steerInput += clamp(target - this.steerInput, -rate * dt, rate * dt);
     const v = Math.abs(this.forwardSpeed);
-    const maxA = 0.6 / (1 + v / 11);
+    // Speed-sensitive lock: plenty in town, gentle on the highway.
+    const maxA = 0.6 / (1 + v / 9 + (v / 28) ** 2);
     this.steerAngle = this.steerInput * maxA;
 
     // Gear logic (automatic with reverse on S at standstill).
@@ -414,6 +415,34 @@ export class Vehicle {
 
     // Body–ground contact (rollovers, landing on the roof or side).
     this.bodyGroundContacts(q, h);
+
+    // Stability control and anti-roll bars, as on a real SUV — only while the
+    // tyres are planted, so a tornado (or a bad jump) can still roll it.
+    const planted = this.wheels.filter((wh) => wh.load > 0).length;
+    if (planted >= 3) {
+      const side = new THREE.Vector3().crossVectors(fwd, up);
+      const rollAngle = Math.asin(clamp(side.y, -1, 1));
+      const rollRate = this.angVel.dot(fwd);
+      // (A positive turn about the forward axis drops the right side, so push back the other way.)
+      this.torque.addScaledVector(fwd, rollAngle * 160000 - rollRate * 45000);
+      // Hold the yaw rate near what the steering asks for; let small drifts through.
+      const vLong = this.vel.dot(fwd);
+      // What the steering asks for, capped at what the tyres can actually hold (a·g / v).
+      const grip = (this.surface === 'asphalt' ? 0.7 : 0.6) * 9.81 * 0.85;
+      const cap = grip / Math.max(5, Math.abs(vLong));
+      const wanted = clamp((-vLong * Math.tan(this.steerAngle)) / 2.95, -cap, cap);
+      const err = this.angVel.dot(up) - wanted;
+      const slack = 0.06;
+      if (Math.abs(err) > slack) this.torque.addScaledVector(up, -(err - Math.sign(err) * slack) * 60000);
+      // A sideways slide scrubs speed off (tyres digging in, more on dirt), without upsetting the balance.
+      const lat = this.vel.dot(side);
+      const scrub = this.surface === 'asphalt' ? 900 : 1500;
+      if (Math.abs(lat) > 1.5) {
+        this.force.addScaledVector(side, -lat * scrub);
+        const sp = this.vel.length();
+        if (sp > 1) this.force.addScaledVector(this.vel, (-Math.min(1, (Math.abs(lat) - 1.5) / 6) * this.mass * 2.5) / sp);
+      }
+    }
 
     // Integrate.
     this.vel.addScaledVector(this.force, h / this.mass);

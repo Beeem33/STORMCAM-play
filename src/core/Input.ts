@@ -32,6 +32,8 @@ export class Input {
     }, { passive: true });
     target.addEventListener('mousedown', (e) => {
       if (e.button === 2) this.mouseRight = true;
+      // Left click is a game action only once the mouse is captured (the first click just captures it).
+      if (e.button === 0 && this.locked) this.pressed.add('MouseLeft');
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 2) this.mouseRight = false;

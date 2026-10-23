@@ -73,7 +73,10 @@ export class DebrisSystem {
   throwObject(obj: THREE.Object3D, vel: THREE.Vector3, mass = 1): void {
     // Keep the number of big flying objects bounded: the oldest settle out of the scene.
     if (this.bodies.length >= MAX_BODIES) {
-      const old = this.bodies.shift()!;
+      // Drop the oldest light piece; heavy things (vehicles, bales) keep flying.
+      let i = this.bodies.findIndex((b) => b.mass < 3);
+      if (i < 0) i = 0;
+      const [old] = this.bodies.splice(i, 1);
       old.obj.removeFromParent();
     }
     this.group.attach(obj);
@@ -187,7 +190,8 @@ export class DebrisSystem {
         o.rotation.y += b.angVel.y * dt;
         o.rotation.z += b.angVel.z * dt;
         const g = heightAt(o.position.x, o.position.z);
-        if (o.position.y < g + 0.2) {
+        // Only a falling body lands (one just launched off the ground is still rising).
+        if (o.position.y < g + 0.2 && b.vel.y <= 0) {
           o.position.y = g + 0.2;
           if (b.vel.length() < 8) b.grounded = true;
           b.vel.multiplyScalar(0.3);
