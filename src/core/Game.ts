@@ -630,7 +630,7 @@ export class Game {
     if (!t) return;
     t.phaseTime = 0; // stays mature for as long as the menu is up
     // A slow figure-of-eight around its spot instead of its usual wander off across the map.
-    const a = this.time * 0.045;
+    const a = this.time * 0.022;
     t.pin(MENU_TORNADO.x + Math.sin(a) * 70, MENU_TORNADO.z + Math.sin(a * 2) * 30);
     this.vehicle.placeAt(MENU_TRUCK.x, MENU_TRUCK.z, MENU_TRUCK.heading);
     this.vehicle.vel.set(0, 0, 0);
