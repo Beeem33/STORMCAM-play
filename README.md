@@ -20,9 +20,9 @@ npm run dev        # http://localhost:8191 (also on your LAN)
 npm run build      # type-check + production build into dist/
 ```
 
-`npm run deploy` builds and force-pushes only `dist/` to the public repo
-[Beeem33/STORMCAM-play](https://github.com/Beeem33/STORMCAM-play), which GitHub
-Pages serves at the play link above; this source repo stays private.
+Pushing to `main` publishes the game: a GitHub Actions workflow
+(`.github/workflows/deploy.yml`) builds it and deploys `dist/` to GitHub Pages
+at the play link above.
 
 Any static file server can host `dist/` (it uses relative paths). Chrome or
 Edge on a desktop/laptop GPU is the target. The game uses pointer lock, so

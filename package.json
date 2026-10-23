@@ -8,8 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "deploy": "bash scripts/deploy-play.sh"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "three": "^0.186.1"
