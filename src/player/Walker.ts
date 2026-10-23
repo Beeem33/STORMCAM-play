@@ -27,6 +27,10 @@ export class Walker {
   readonly tumble = new THREE.Euler();
   private readonly spin = new THREE.Vector3();
   private airTime = 0;
+  /** The vortex he's caught in (centre and core radius), so it can keep him in orbit. */
+  vortex: { x: number; z: number; r: number } | null = null;
+  /** Steady the tumble (the camera settles to look ahead), e.g. for the last moment. */
+  steady = false;
   colliders: (x: number, z: number, r: number) => Iterable<Collider2D> = () => [];
   /** Extra obstacle (the vehicle) as an oriented box. */
   car: { x: number; z: number; rot: number; hx: number; hz: number } | null = null;
@@ -48,6 +52,19 @@ export class Walker {
     this.vel.x += (wind.x - this.vel.x) * k;
     this.vel.y += (wind.y * 0.9 - this.vel.y) * k - 9.81 * dt;
     this.vel.z += (wind.z - this.vel.z) * k;
+    // The vortex keeps him: drawn back toward an orbit just inside the core,
+    // carried up and down between ~20 and ~60 m.
+    if (this.vortex) {
+      const dx = this.pos.x - this.vortex.x, dz = this.pos.z - this.vortex.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const want = this.vortex.r * 0.7 + 12;
+      const pull = (want - d) * 1.4 * dt;
+      this.vel.x += (dx / d) * pull;
+      this.vel.z += (dz / d) * pull;
+      const g0 = heightAt(this.pos.x, this.pos.z);
+      const targetH = g0 + 40 + 20 * Math.sin(this.caughtTime * 0.45);
+      this.vel.y += (targetH - this.pos.y) * 0.9 * dt;
+    }
     // Gusts inside the core fling him about.
     this.vel.x += (Math.random() - 0.5) * 30 * dt;
     this.vel.y += (Math.random() - 0.4) * 20 * dt;
@@ -73,18 +90,21 @@ export class Walker {
     if (this.pos.y < g) {
       const hit = -this.vel.y;
       this.pos.y = g;
-      if (this.airTime > 1 && hit > 22) this.dead = true; // slammed into the ground
       this.vel.y = Math.abs(this.vel.y) * 0.3;
       this.vel.x *= 0.5;
       this.vel.z *= 0.5;
       this.airTime = 0;
     } else this.airTime += dt;
-    if (this.caughtTime > 7) this.dead = true;
     // Tumbling: the spin keeps changing as he's thrown around.
     this.spin.x += (Math.random() - 0.5) * 40 * dt;
     this.spin.y += (Math.random() - 0.5) * 30 * dt;
     this.spin.z += (Math.random() - 0.5) * 40 * dt;
     this.spin.clampLength(0, 9);
+    if (this.steady) {
+      this.spin.multiplyScalar(Math.max(0, 1 - dt * 6));
+      this.tumble.x *= Math.max(0, 1 - dt * 5);
+      this.tumble.z *= Math.max(0, 1 - dt * 5);
+    }
     this.tumble.x += this.spin.x * dt;
     this.tumble.y += this.spin.y * dt;
     this.tumble.z += this.spin.z * dt;

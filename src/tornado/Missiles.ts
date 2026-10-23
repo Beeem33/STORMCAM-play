@@ -13,6 +13,8 @@ import { patchMaterial } from '../rendering/Atmosphere';
  */
 
 interface Kind {
+  label: string;
+  lethal: boolean;
   geo: THREE.BufferGeometry;
   mat: THREE.MeshStandardMaterial;
   mass: number;
@@ -41,14 +43,14 @@ export class Missiles {
     const branch = new THREE.CylinderGeometry(0.05, 0.12, 3.2, 5);
     branch.rotateZ(Math.PI / 2);
     this.kinds = [
-      { geo: new THREE.BoxGeometry(3.6, 0.04, 0.2), mat: wood, mass: 1.2, weight: 3 }, // 2x8 board
-      { geo: new THREE.BoxGeometry(2.4, 0.03, 0.15), mat: greyWood, mass: 0.8, weight: 3 }, // fence board
-      { geo: new THREE.BoxGeometry(2.4, 0.01, 0.9), mat: tin, mass: 1.5, weight: 3 }, // roofing sheet
-      { geo: new THREE.BoxGeometry(1.8, 0.01, 1.1), mat: rustTin, mass: 1.3, weight: 2 }, // rusty sheet
-      { geo: post, mat: wood, mass: 2.5, weight: 2 }, // fence post
-      { geo: branch, mat: bark, mass: 3, weight: 2 }, // tree limb
-      { geo: new THREE.CylinderGeometry(0.29, 0.29, 0.88, 12), mat: drum, mass: 6, weight: 1 }, // oil drum
-      { geo: new THREE.CylinderGeometry(0.75, 0.75, 1.2, 14), mat: hay, mass: 12, weight: 0.4 }, // round bale
+      { label: 'a two-by-eight', lethal: true, geo: new THREE.BoxGeometry(3.6, 0.04, 0.2), mat: wood, mass: 1.2, weight: 3 }, // 2x8 board
+      { label: 'a fence board', lethal: false, geo: new THREE.BoxGeometry(2.4, 0.03, 0.15), mat: greyWood, mass: 0.8, weight: 3 }, // fence board
+      { label: 'a sheet of roofing', lethal: true, geo: new THREE.BoxGeometry(2.4, 0.01, 0.9), mat: tin, mass: 1.5, weight: 3 }, // roofing sheet
+      { label: 'a sheet of rusted tin', lethal: true, geo: new THREE.BoxGeometry(1.8, 0.01, 1.1), mat: rustTin, mass: 1.3, weight: 2 }, // rusty sheet
+      { label: 'a fence post', lethal: true, geo: post, mat: wood, mass: 2.5, weight: 2 }, // fence post
+      { label: 'a tree limb', lethal: true, geo: branch, mat: bark, mass: 3, weight: 2 }, // tree limb
+      { label: 'an oil drum', lethal: true, geo: new THREE.CylinderGeometry(0.29, 0.29, 0.88, 12), mat: drum, mass: 6, weight: 1 }, // oil drum
+      { label: 'a round hay bale', lethal: false, geo: new THREE.CylinderGeometry(0.75, 0.75, 1.2, 14), mat: hay, mass: 12, weight: 0.4 }, // round bale
     ];
   }
 
@@ -67,6 +69,34 @@ export class Missiles {
       this.acc -= 1;
       this.launch(t, target);
     }
+  }
+
+  /**
+   * One heavy object flung straight at `target` (the chaser's face) from
+   * `back` metres out along `from`→target, fast. Returns it and what it is.
+   */
+  /** A heavy object, not yet flying (the caller flies it), with what it is. */
+  makeLethal(): { obj: THREE.Mesh; label: string; mass: number } {
+    const lethal = this.kinds.filter((k) => k.lethal);
+    const k = lethal[Math.floor(Math.random() * lethal.length)];
+    const mesh = new THREE.Mesh(k.geo, k.mat);
+    mesh.frustumCulled = false;
+    return { obj: mesh, label: k.label, mass: k.mass };
+  }
+
+  launchAt(target: THREE.Vector3, from: THREE.Vector3, speed = 55): { obj: THREE.Object3D; label: string } {
+    const lethal = this.kinds.filter((k) => k.lethal);
+    const k = lethal[Math.floor(Math.random() * lethal.length)];
+    const mesh = new THREE.Mesh(k.geo, k.mat);
+    mesh.position.copy(from);
+    mesh.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+    mesh.frustumCulled = false;
+    mesh.updateMatrixWorld(true);
+    const dist = target.distanceTo(from);
+    const vel = target.clone().sub(from).normalize().multiplyScalar(speed);
+    vel.y += 9.81 * (dist / speed) * 0.5; // aim off for the drop
+    this.debris.throwObject(mesh, vel, 20);
+    return { obj: mesh, label: k.label };
   }
 
   private launch(t: Tornado, target: THREE.Vector3): void {

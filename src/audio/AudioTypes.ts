@@ -42,6 +42,8 @@ export interface AudioFrameState {
   /** Total wind speed at the listener (ambient storm wind + tornado). */
   windSpeed: number;
 
+  /** 1 while the chaser is screaming (carried by the vortex). */
+  screaming?: number;
   /** 0..1 outdoor warning sirens sounding in the distance. */
   siren?: number;
   /** Tornado state; active=false when none exists. */

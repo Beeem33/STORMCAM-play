@@ -58,9 +58,16 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   near miss within 500 m of the vortex edge, more for an intercept and for
   stronger tornadoes. Each lost probe costs $250 to replace.
 - **Caught on foot:** past ~50 m/s wind or ~22 m/s updraft the chaser is
-  picked up and carried by the vortex's wind field, tumbling (the camera
-  spins with him), for up to ~7 s before it kills him, or sooner if he's
-  slammed into the ground.
+  picked up and held in orbit around the vortex (roughly 20–60 m up, often
+  higher), tumbling and screaming (a synthesised voice). 10–20 s in, a
+  heavy object (fence post, tree limb, oil drum, roofing) comes out of the
+  debris straight at the lens — the tumble steadies so you see it — and
+  kills him; the death card names it.
+- **Swept up in the truck:** after ~2.5 s held aloft by the vortex, the
+  doors rip off, he's dragged out through the driver's door and clings to
+  the frame for a few seconds (bodycam, arms up), then his grip goes and
+  he's flung into the vortex (and the on-foot ride above). The empty truck
+  is still taken by the tornado if he's left it.
 - **Inventory:** three hand-held items, body-cam style with nothing on the
   HUD: 1/2/3 or the mouse wheel raise one into the bottom of the shot (again
   to put it away). 1 camcorder (click to film; its flip screen shows REC and

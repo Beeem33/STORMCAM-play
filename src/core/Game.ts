@@ -5,7 +5,7 @@ import { Terrain } from '../environment/Terrain';
 import { Lighting } from '../environment/Lighting';
 import { WorldProps } from '../environment/WorldProps';
 import { ContactShadow } from '../vehicle/ContactShadow';
-import { CG_HEIGHT, DRIVER_DOOR, type VehicleParts } from '../vehicle/VehicleModel';
+import { CG_HEIGHT, DRIVER_DOOR, DRIVER_EYE, type VehicleParts } from '../vehicle/VehicleModel';
 import { Vehicle, type DriveInput } from '../vehicle/Vehicle';
 import { Windshield } from '../vehicle/Windshield';
 import { CameraRig, LENSES } from '../camera/CameraRig';
@@ -116,6 +116,14 @@ export class Game {
   private walkerPeak = 0;
   private readonly walkerFrom = new THREE.Vector3();
   private deathText: { title: string; sub: string } | null = null;
+  /** Caught on foot: when the fatal object comes, and the object itself once it's in the air. */
+  private killAt = 0;
+  private killer: { obj: THREE.Object3D; label: string; at: number; tries: number } | null = null;
+  private deathCause = '';
+  /** Swept up in the truck: doors go, he's dragged out, hangs on, then lets go. */
+  private ejection: { phase: 'doors' | 'pull' | 'hold'; t: number } | null = null;
+  private sweptTime = 0;
+  private holdFor = 3;
   private tornadoSeen = false;
   /** Seconds since the truck was last inside the tornado's core region. */
   private inVortexTime = 0;
@@ -323,6 +331,12 @@ export class Game {
     this.driverKilled = false;
     this.truckPeak = 0;
     this.walkerPeak = 0;
+    this.killAt = 0;
+    this.killer?.obj.removeFromParent();
+    this.killer = null;
+    this.ejection = null;
+    this.sweptTime = 0;
+    this.deathCause = '';
     this.deathText = null;
     this.tornadoSeen = false;
     this.wreckToasted = false;
@@ -407,6 +421,114 @@ export class Game {
   /** Hands busy (carrying, programming, thrown about) or not playing: no item in view. */
   private get itemsHidden(): boolean {
     return this.state !== 'playing' || this.probes.carrying || this.terminal.open || this.body.busy || this.walker.caught || this.walker.dead;
+  }
+
+  /**
+   * Caught on foot: the vortex holds him in orbit, and 10–20 s in something
+   * heavy comes out of the debris cloud straight at him. The tumble steadies
+   * just before, so he sees it coming.
+   */
+  private vortexRide(dt: number, t: TornadoSystem['tornado']): void {
+    const w = this.walker;
+    w.vortex = t ? { x: t.position.x, z: t.position.z, r: t.radius } : null;
+    if (this.killAt === 0) this.killAt = 10 + Math.random() * 10;
+    w.steady = w.caughtTime > this.killAt - 1.4;
+    const eye = w.eye;
+    if (!this.killer && w.caughtTime > this.killAt - 0.5) {
+      // Out of the debris cloud, dead ahead, and it's coming for him.
+      const k = this.missiles.makeLethal();
+      const fwd = this.rig.forward(new THREE.Vector3());
+      fwd.y = clamp(fwd.y, -0.25, 0.25);
+      fwd.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.4).normalize();
+      k.obj.position.copy(eye).addScaledVector(fwd, 14).y += 1.5;
+      k.obj.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      this.tornadoes.debris.group.add(k.obj);
+      this.killer = { obj: k.obj, label: k.label, at: w.caughtTime, tries: 1 };
+    }
+    if (this.killer && !w.dead) {
+      const o = this.killer.obj;
+      // Riding the same flow he is, closing at ~45 m/s and tumbling end over end.
+      const to = _v.subVectors(eye, o.position);
+      const d = to.length();
+      o.position.addScaledVector(w.vel, dt).addScaledVector(to.normalize(), Math.min(d, 45 * dt));
+      o.rotation.x += dt * 9;
+      o.rotation.z += dt * 6;
+      if (d < 1.2) {
+        w.dead = true;
+        this.deathCause = this.killer.label;
+        this.shakeImpulse = 1;
+        this.audio.impact('body', 1, eye.clone());
+        // It carries on, tumbling away.
+        o.removeFromParent();
+        this.tornadoes.debris.throwObject(o, w.vel.clone().addScaledVector(to, 20), 3);
+      }
+    }
+  }
+
+  /**
+   * The truck has been carried up by the vortex for a few seconds with him in
+   * it: the doors are ripped off, he's dragged out through the driver's door,
+   * clings to the door frame for a few seconds (bodycam on, arms up), and then
+   * his grip goes and he's flung away into the vortex.
+   */
+  private updateEjection(dt: number): void {
+    const v = this.vehicle;
+    if (!this.ejection) {
+      if (this.onFoot) return;
+      const lift = v.pos.y - CG_HEIGHT - heightAt(v.pos.x, v.pos.z);
+      const swept = this.inVortexTime > 0 && v.airborne > 0.3 && lift > 6;
+      this.sweptTime = swept ? this.sweptTime + dt : Math.max(0, this.sweptTime - dt * 2);
+      if (this.sweptTime < 2.5 || this.driverKilled) return;
+      this.ejection = { phase: 'doors', t: 0 };
+      this.holdFor = 2.5 + Math.random() * 2;
+      // The doors go first, the driver's door with a bang.
+      const out = new THREE.Vector3(-1, 0.3, 0).applyQuaternion(v.quat).multiplyScalar(14).add(v.vel);
+      this.breakables.tearNamed('Door_FL', out);
+      for (const d of ['Door_RL', 'Door_FR', 'Door_RR']) if (Math.random() < 0.7) this.breakables.tearNamed(d, out.clone().multiplyScalar(Math.random() + 0.5));
+      this.shakeImpulse = 1;
+      this.audio.impact('body', 1, v.pos.clone());
+      this.windshield.impact(0.9);
+      return;
+    }
+    const e = this.ejection;
+    e.t += dt;
+    this.shakeImpulse = Math.max(this.shakeImpulse, 0.7);
+    // Where he clings: just outside the driver's door opening, feet at floor level.
+    const anchor = this.vehicleObj.localToWorld(new THREE.Vector3(-1.85, -0.85, -0.1));
+    const seat = this.vehicleObj.localToWorld(new THREE.Vector3(DRIVER_EYE.x, DRIVER_EYE.y - CG_HEIGHT - 1.3, DRIVER_EYE.z));
+    if (e.phase === 'doors' && e.t > 0.7) {
+      // Dragged out of the seat.
+      e.phase = 'pull';
+      e.t = 0;
+      this.onFoot = true;
+      this.rig.setMode('bodycam');
+      this.walker.placeAt(seat.x, seat.z);
+      this.walker.caught = false;
+      this.renderer.resetMotion();
+    }
+    if (e.phase === 'doors') return;
+    const k = e.phase === 'pull' ? Math.min(1, e.t / 0.8) : 1;
+    this.walker.pos.copy(seat).lerp(anchor, k * k * (3 - 2 * k));
+    this.walker.vel.set(0, 0, 0);
+    this.walker.strain = 1; // arms up, bracing
+    // Facing the truck he's hanging on to.
+    const c = this.vehicle.pos;
+    this.rig.yaw = Math.atan2(-(c.x - anchor.x), -(c.z - anchor.z));
+    this.rig.pitch = 0.05;
+    if (e.phase === 'pull' && e.t > 0.8) {
+      e.phase = 'hold';
+      e.t = 0;
+    }
+    if (e.phase === 'hold' && e.t > this.holdFor) {
+      // His grip goes.
+      this.ejection = null;
+      const w = this.walker;
+      w.caught = true;
+      w.caughtTime = 0;
+      w.vel.copy(v.vel).add(new THREE.Vector3(-1, 0.4, 0).applyQuaternion(v.quat).multiplyScalar(16));
+      this.walkerPeak = 0;
+      this.killAt = 0;
+    }
   }
 
   /** How high the tornado has thrown the truck; coming down from that height is fatal. */
@@ -655,9 +777,10 @@ export class Game {
     else if (!this.onFoot) this.trackTruckFlight();
     this.vehicle.writeTransform(this.vehicleObj);
     this.updateVehicleVisuals(sdt);
+    if (playing) this.updateEjection(sdt);
 
     // --- On foot.
-    if (this.onFoot && playing) {
+    if (this.onFoot && playing && !this.ejection) {
       // Setting a probe down roots the feet until it's on the ground.
       const rooted = this.body.busy || this.terminal.open;
       const fwd = rooted ? 0 : (inp.isDown('KeyW') ? 1 : 0) - (inp.isDown('KeyS') ? 1 : 0);
@@ -666,7 +789,8 @@ export class Game {
       const yawCar = this.vehicle.heading;
       this.walker.car = { x: this.vehicle.pos.x, z: this.vehicle.pos.z, rot: -yawCar, hx: 1.0, hz: 2.55 };
       this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w);
-      this.keepInChaseArea(this.walker.pos, this.walker.vel);
+      if (!this.walker.caught) this.keepInChaseArea(this.walker.pos, this.walker.vel);
+      if (this.walker.caught) this.vortexRide(sdt, t);
       if (this.walker.caught) {
         if (this.walkerPeak === 0 && this.walker.caughtTime < 0.1) this.walkerFrom.copy(this.walker.pos);
         this.walkerPeak = Math.max(this.walkerPeak, this.walker.pos.y - heightAt(this.walker.pos.x, this.walker.pos.z), 0.001);
@@ -960,10 +1084,13 @@ export class Game {
         this.endTimer = 6;
         this.endReason = 'Caught in the tornado';
         const ft = Math.round(this.walkerPeak * 3.281);
+        const now = Math.round(Math.max(0, this.walker.pos.y - heightAt(this.walker.pos.x, this.walker.pos.z)) * 3.281);
         const away = Math.hypot(this.walker.pos.x - this.walkerFrom.x, this.walker.pos.z - this.walkerFrom.z);
-        this.showDeath(ft > 15
-          ? `The vortex carried you ${ft} feet into the air. Your bodycam was found ${farText(away)} from where you stood.`
-          : 'You were caught in the tornado. Your bodycam kept recording.');
+        this.showDeath(this.deathCause
+          ? `${this.deathCause[0].toUpperCase()}${this.deathCause.slice(1)} came out of the vortex and struck you ${now} feet above the ground. Your bodycam was found ${farText(away)} away.`
+          : ft > 15
+            ? `The vortex carried you ${ft} feet into the air. Your bodycam was found ${farText(away)} from where you stood.`
+            : 'You were caught in the tornado. Your bodycam kept recording.');
       } else if (!this.onFoot && this.driverKilled) {
         this.endTimer = 6;
         this.endReason = 'Truck thrown by the tornado';
@@ -1007,6 +1134,8 @@ export class Game {
     const tor = this.tornadoes.tornado;
     a.tornado.active = !!tor;
     a.siren = 0;
+    // Screaming from the moment he's torn loose until it's over.
+    a.screaming = this.state === 'playing' && this.onFoot && (this.walker.caught || this.ejection !== null) && !this.walker.dead ? 1 : 0;
     if (tor) {
       a.tornado.position.copy(tor.position);
       a.tornado.distance = tor.distanceTo(cam.position);
@@ -1059,7 +1188,7 @@ export class Game {
       else if (!this.onFoot) goal = 'Stop in its path and get out (F)';
       else goal = 'Grab a probe from the back of the truck (E at the liftgate)';
     } else goal = this.recorder.recording ? 'Keep filming and stay alive' : 'Film the tornado: camcorder (1), click to record';
-    if (this.onFoot && this.walker.caught) goal = '';
+    if ((this.onFoot && this.walker.caught) || this.ejection) goal = '';
     if (P.available) objective.push(`PROBES  ${armed}/4 ARMED${unarmed ? `  ·  ${unarmed} NOT PROGRAMMED` : ''}`);
     if (v.destroyed) objective.push('TRUCK WRECKED');
     const warning = '';
@@ -1070,7 +1199,7 @@ export class Game {
       const d = this.doorWorld(new THREE.Vector3());
       if (Math.hypot(d.x - this.walker.pos.x, d.z - this.walker.pos.z) < 3.5) prompt = 'F  GET IN';
       if (!this.body.busy) prompt = this.probes.prompt(this.walker.pos) || prompt;
-      if (this.terminal.open) prompt = '';
+      if (this.terminal.open || this.ejection || this.walker.caught) prompt = '';
     }
     let center = '';
     if (this.onFoot && this.walker.dead) center = 'Caught in the tornado';

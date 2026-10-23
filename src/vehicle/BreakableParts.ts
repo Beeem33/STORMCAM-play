@@ -81,6 +81,14 @@ export class BreakableParts {
     }
   }
 
+  /** Rip a specific part off now (if it's still on). */
+  tearNamed(name: string, vel: THREE.Vector3): boolean {
+    const p = this.parts.find((q) => q.name === name && !q.gone);
+    if (!p) return false;
+    this.tear(p, vel);
+    return true;
+  }
+
   /** Violent wind across the truck: random parts tear loose. */
   wind(dt: number, windRel: number, truckVel: THREE.Vector3, wind: THREE.Vector3): void {
     if (windRel < 62) return;
