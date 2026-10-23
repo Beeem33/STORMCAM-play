@@ -238,7 +238,7 @@ export class Game {
         this.audio.playMusic(MENU_MUSIC);
       },
       () => {
-        this.audio.setWorldLevel(0.35, 1.5);
+        this.audio.setWorldLevel(0.5, 1.5);
         this.ui.showMenu();
       },
     );
@@ -407,7 +407,7 @@ export class Game {
     this.setupDay();
     this.setupMenuScene();
     this.ui.showMenu();
-    this.audio.setWorldLevel(0.35, 1);
+    this.audio.setWorldLevel(0.5, 1);
     this.audio.playMusic(MENU_MUSIC);
   }
 
@@ -634,6 +634,14 @@ export class Game {
     t.pin(MENU_TORNADO.x + Math.sin(a) * 70, MENU_TORNADO.z + Math.sin(a * 2) * 30);
     this.vehicle.placeAt(MENU_TRUCK.x, MENU_TRUCK.z, MENU_TRUCK.heading);
     this.vehicle.vel.set(0, 0, 0);
+    // Weather at the truck: gusty inflow screaming in toward the funnel and driving rain that comes in waves.
+    const L = this.weather.local;
+    const gust = 0.5 + 0.5 * Math.sin(this.time * 0.8) * Math.sin(this.time * 0.31 + 1.7);
+    _v.set(t.position.x - this.vehicle.pos.x, 0, t.position.z - this.vehicle.pos.z).normalize();
+    L.wind.set(_v.x, 0, _v.z).multiplyScalar(14 + gust * 14).add(_w.set(-_v.z, 0, _v.x).multiplyScalar(5));
+    L.rain = 0.45 + gust * 0.4;
+    L.visibility = 32000 / (1 + L.rain * L.rain * 26 + L.rain * 2) * (1 - L.cover * 0.2);
+    this.weather.wetness = 1;
     // Now and then a bolt comes down beyond the funnel.
     this.menuStrike -= dt;
     if (this.menuStrike <= 0) {
@@ -916,7 +924,7 @@ export class Game {
     atmo.uFogDensity.value = 3 / L.visibility;
     atmo.uWetness.value = this.weather.wetness;
     atmo.uWind.value.set(this.windAtCam.x, this.windAtCam.z);
-    this.windDebris.update(playing ? sdt : 0, cam.position, this.windAtCam);
+    this.windDebris.update(sdt, cam.position, this.windAtCam);
     this.grass.update(cam.position, this.vehicleObj);
     this.truckDamage.update(this.vehicleObj);
     this.terrain.update(cam, this.renderer.renderHeight);
@@ -1159,7 +1167,7 @@ export class Game {
     a.surface = this.vehicle.surface;
     a.tireSlip = this.vehicle.tireSlip;
     a.bumpiness = Math.max(this.vehicle.bumpiness, this.vehicle.jolt);
-    a.rain = this.state === 'menu' ? L.rain * 0.5 : L.rain;
+    a.rain = L.rain;
     a.hail = L.hail;
     a.windSpeed = this.windAtCam.length();
     const tor = this.tornadoes.tornado;

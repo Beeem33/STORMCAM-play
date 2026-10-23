@@ -33,7 +33,8 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   section road with its lights on while a mature EF4 (held at a 150 m core
   so the funnel reads against the sky) works the fields ~500 m off,
   throwing debris and drifting around its field, with the odd lightning
-  bolt beyond it. The camera sits a few metres off the truck's rear quarter
+  bolt beyond it, in driving rain and strong gusty inflow (wet road, wind
+  debris, slanting rain). The camera sits a few metres off the truck's rear quarter
   at head height and drifts slowly, framing truck and funnel right of the
   menu.
 - **Objectives:** one line under the tornado arrow always says what to do

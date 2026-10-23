@@ -1,6 +1,6 @@
 # STORMCAM
 
-**[▶ Play in your browser](https://beeem33.github.io/STORMCAM-play/)**: Chrome or Edge on a desktop or laptop, keyboard and mouse.
+**[▶ Play in your browser](https://beeem33.github.io/STORMCAM/)**: Chrome or Edge on a desktop or laptop, keyboard and mouse.
 
 A first-person storm-chasing game that should look like real dashcam footage.
 Drive the section roads of central Kansas, read the radar, get into position
