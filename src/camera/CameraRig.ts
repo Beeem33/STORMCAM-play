@@ -24,11 +24,11 @@ class Wobble {
 export const LENSES: Record<CameraMode, LensProfile> = {
   driver: {
     barrel: 0.08, chroma: 0.004, noise: 1.0, sharpen: 0.35, vignette: 0.28,
-    saturation: 0.9, contrast: 1.1, tint: new THREE.Color(1, 1, 1), ev: 0.82, shutter: 0.45,
+    saturation: 0.9, contrast: 1.1, tint: new THREE.Color(1, 1, 1), ev: 1.2, shutter: 0.45,
   },
   dashcam: {
     barrel: 0.34, chroma: 0.014, noise: 1.6, sharpen: 0.6, vignette: 0.45,
-    saturation: 0.84, contrast: 1.14, tint: new THREE.Color(0.985, 1.0, 0.97), ev: 0.8, shutter: 0.3,
+    saturation: 0.84, contrast: 1.14, tint: new THREE.Color(0.985, 1.0, 0.97), ev: 1.17, shutter: 0.3,
   },
   // Stabilised drone gimbal for the menu: clean, gentle, filmic.
   drone: {
@@ -39,7 +39,7 @@ export const LENSES: Record<CameraMode, LensProfile> = {
   bodycam: {
     // Same grade and exposure bias as the driver view, so getting in and out doesn't shift the light.
     barrel: 0.26, chroma: 0.012, noise: 1.35, sharpen: 0.55, vignette: 0.32,
-    saturation: 0.9, contrast: 1.1, tint: new THREE.Color(1, 1, 1), ev: 0.82, shutter: 0.55,
+    saturation: 0.9, contrast: 1.1, tint: new THREE.Color(1, 1, 1), ev: 1.2, shutter: 0.55,
   },
 };
 
