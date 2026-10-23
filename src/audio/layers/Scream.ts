@@ -10,8 +10,11 @@
 import type { AudioFrameState } from '../AudioTypes';
 import type { Core } from '../Core';
 
-/** Recorded screams, relative to the site root. */
-const SCREAM_FILES = ['audio/scream-1.mp3', 'audio/scream-2.mp3', 'audio/scream-3.mp3'];
+/**
+ * Recorded screams, relative to the site root, e.g. 'audio/scream-1.mp3'.
+ * None yet: until some are added the synthesised voice is used.
+ */
+const SCREAM_FILES: string[] = [];
 
 interface Voice {
   osc: OscillatorNode;
