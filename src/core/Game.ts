@@ -636,9 +636,9 @@ export class Game {
     this.vehicle.vel.set(0, 0, 0);
     // Weather at the truck: gusty inflow screaming in toward the funnel and driving rain that comes in waves.
     const L = this.weather.local;
-    const gust = 0.5 + 0.5 * Math.sin(this.time * 0.8) * Math.sin(this.time * 0.31 + 1.7);
+    const gust = 0.5 + 0.5 * Math.sin(this.time * 0.35) * Math.sin(this.time * 0.13 + 1.7);
     _v.set(t.position.x - this.vehicle.pos.x, 0, t.position.z - this.vehicle.pos.z).normalize();
-    L.wind.set(_v.x, 0, _v.z).multiplyScalar(14 + gust * 14).add(_w.set(-_v.z, 0, _v.x).multiplyScalar(5));
+    L.wind.set(_v.x, 0, _v.z).multiplyScalar(4 + gust * 5).add(_w.set(-_v.z, 0, _v.x).multiplyScalar(1.5));
     L.rain = 0.45 + gust * 0.4;
     L.visibility = 32000 / (1 + L.rain * L.rain * 26 + L.rain * 2) * (1 - L.cover * 0.2);
     this.weather.wetness = 1;
@@ -901,7 +901,10 @@ export class Game {
     this.camVel.subVectors(cam.position, this.prevCam).divideScalar(Math.max(dt, 1e-3));
     if (this.camVel.length() > 200) this.camVel.set(0, 0, 0);
     this.prevCam.copy(cam.position);
-    this.tornadoes.windAt(cam.position, this.windAtCam).add(L.wind);
+    this.tornadoes.windAt(cam.position, this.windAtCam);
+    // The title camera sits close to the funnel; its full wind field there would blow the rain flat.
+    if (this.state === 'menu') this.windAtCam.clampLength(0, 5);
+    this.windAtCam.add(L.wind);
 
     // --- World streaming and destruction.
     this.world.update(sdt, cam.position, playing ? t : null);
