@@ -25,6 +25,7 @@ async function boot(): Promise<void> {
   if (import.meta.env.DEV || new URLSearchParams(location.search).has('dev')) installDevTools(game);
   loading.remove();
   game.start();
+  game.showIntro();
 }
 
 void boot();

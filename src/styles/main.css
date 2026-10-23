@@ -37,6 +37,7 @@ button.btn:disabled { opacity: 0.4; cursor: default; }
 }
 .menu .col { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
 .menu h1 { font: 400 60px/1 'Share Tech Mono', var(--mono); letter-spacing: 0.1em; margin: 0 0 6px; display: flex; align-items: center; gap: 16px; white-space: nowrap; text-shadow: 0 0 18px rgba(255,255,255,0.18); }
+.menu h1 .cam, .intro .title .cam { color: #ff2b1c; text-shadow: 0 0 18px rgba(255,40,25,0.45); }
 .menu h1 .rec { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px rgba(255,60,50,0.8); animation: blink 1.2s steps(2, start) infinite; }
 .menu .tag { color: var(--fg-dim); font: 400 15px/1.5 'Share Tech Mono', var(--mono); letter-spacing: 0.03em; margin: 0 0 22px; }
 .menu .btn { font-family: 'Share Tech Mono', var(--mono); letter-spacing: 0.12em; }
@@ -133,3 +134,17 @@ button.btn:disabled { opacity: 0.4; cursor: default; }
 }
 
 .loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 600 13px var(--mono); letter-spacing: 0.3em; color: var(--fg-dim); background: #000; }
+
+/* ---------------------------------------------------------------- intro */
+.intro { position: absolute; inset: 0; z-index: 60; background: #000; pointer-events: auto; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', var(--mono); color: #eef1f2; }
+.intro.out { opacity: 0; pointer-events: none; }
+.intro .play { font: 400 22px 'Share Tech Mono', var(--mono); letter-spacing: 0.4em; padding: 16px 34px 16px 42px; color: #eef1f2; background: transparent; border: 1px solid rgba(255,255,255,0.35); border-radius: 2px; cursor: pointer; transition: opacity 0.4s ease, background 150ms, border-color 150ms; }
+.intro .play:hover, .intro .play:focus-visible { background: rgba(255,255,255,0.08); border-color: #fff; outline: none; }
+.intro .play.gone { opacity: 0; pointer-events: none; }
+.intro .studio, .intro .title { position: absolute; opacity: 0; text-align: center; pointer-events: none; }
+.intro .studio { display: flex; flex-direction: column; gap: 14px; transition: opacity 1.5s ease; }
+.intro .studio small { font-size: 13px; letter-spacing: 0.5em; color: #8a9396; }
+.intro .studio span { font-size: clamp(28px, 5vw, 46px); letter-spacing: 0.3em; }
+.intro .studio.on { opacity: 1; }
+.intro .title { margin: 0; font-weight: 400; font-size: clamp(48px, 11vw, 120px); letter-spacing: 0.12em; text-shadow: 0 0 24px rgba(255,255,255,0.15); transform: scale(0.97); transition: opacity 5s ease, transform 8s ease-out; }
+.intro .title.on { opacity: 1; transform: scale(1); }

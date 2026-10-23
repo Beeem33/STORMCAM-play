@@ -82,7 +82,7 @@ src/
   camera/       Driver / dashcam / handheld rigs and lens profiles
   player/       On-foot movement
   gameplay/     Footage recorder and scoring, radar, career, upgrades
-  audio/        Procedural Web Audio (wind, rain, hail, thunder, tornado, engine, tyres)
+  audio/        Procedural Web Audio (wind, rain, hail, thunder, tornado, engine, tyres), menu music
   ui/           Menus, HUD, report, garage
   dev/          Console dev tools, audio test page
 docs/           Architecture and status notes
@@ -90,3 +90,9 @@ docs/           Architecture and status notes
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) explains how the systems fit
 together and how to extend them.
+
+## Credits
+
+Made by Beem Studio.
+
+- Menu music: "I Needed A Human Body" by Fuzzeke (`public/audio/menu-theme.mp3`).

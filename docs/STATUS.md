@@ -24,10 +24,18 @@ What exists in the code today, and what doesn't. Updated with each milestone.
     center-pivot sprinklers.
   - Billboards, hay stacks, abandoned trucks, stock tanks, round bales.
   - Telephone poles with sagging wires, barbed-wire fences, road signs.
-- **Main menu:** a drone shot. A mature EF3 is staged near the middle of the
-  map and a chase truck circles it with its lights on, while a stabilised
-  drone camera hangs ~85 m up beside the truck, slowly swinging around it,
-  with the tornado looming behind (framed right of the menu).
+- **Intro:** a PLAY button (browsers need a click before sound), then "Made
+  by Beem Studio" fades in and out, two seconds of black, and the STORMCAM
+  title (CAM in red) slowly fades up before the main menu. Any key or click
+  skips it. The menu music starts on PLAY, loops, and fades out when the
+  chase starts (it comes back when you return to the menu).
+- **Main menu:** a low cinematic shot. The chase truck is parked on the
+  section road with its lights on while a mature EF4 (held at a 150 m core
+  so the funnel reads against the sky) works the fields ~500 m off,
+  throwing debris and drifting around its field, with the odd lightning
+  bolt beyond it. The camera sits a few metres off the truck's rear quarter
+  at head height and drifts slowly, framing truck and funnel right of the
+  menu.
 - **Objectives:** one line under the tornado arrow always says what to do
   next: head for the storm, get ahead of the tornado, grab a probe, set it
   down, program it, then film and survive, then cash in.
@@ -59,7 +67,8 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   stronger tornadoes. Each lost probe costs $250 to replace.
 - **Caught on foot:** past ~50 m/s wind or ~22 m/s updraft the chaser is
   picked up and held in orbit around the vortex (roughly 20–60 m up, often
-  higher), tumbling and screaming (a synthesised voice). 10–20 s in, a
+  higher), tumbling and screaming (recorded male screams, with a synthesised voice
+  as the fallback). 10–20 s in, a
   heavy object (fence post, tree limb, oil drum, roofing) comes out of the
   debris straight at the lens — the tumble steadies so you see it — and
   kills him; the death card names it.
@@ -204,8 +213,8 @@ What exists in the code today, and what doesn't. Updated with each milestone.
   warning polygon, and target selection.
 - **On foot:** get out (F), walk or run, wind pushes you, and you can be
   killed in the core.
-- **Audio:** fully procedural, with inside/outside muffling and spatial
-  panning.
+- **Audio:** procedural world sound with inside/outside muffling and spatial
+  panning; recorded menu music and screams.
 - **UI:** main menu, settings (graphics, camera, controls, audio, units),
   controls, pause, report, garage.
 

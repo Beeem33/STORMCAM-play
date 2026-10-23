@@ -96,6 +96,13 @@ export class Tornado {
     return this.phase !== 'dead';
   }
 
+  /** Move the parent storm so the tornado stands at (x, z) — the title screen holds it in one field. */
+  pin(x: number, z: number): void {
+    this.storm.x += x - this.position.x;
+    this.storm.z += z - this.position.z;
+    this.syncPosition();
+  }
+
   private syncPosition(): void {
     const s = this.storm;
     const sp = Math.hypot(s.vx, s.vz) || 1;

@@ -72,6 +72,8 @@ export class UI {
   private readonly toasts: HTMLElement;
   private readonly refs: Record<string, HTMLElement> = {};
   onPanelClose: (() => void) | null = null;
+  /** Tears the intro down without going on to the menu (a chase started some other way). */
+  private cancelIntro: (() => void) | null = null;
 
   constructor(
     root: HTMLElement,
@@ -97,7 +99,7 @@ export class UI {
     this.hud.querySelectorAll<HTMLElement>('[data-r]').forEach((n) => (this.refs[n.dataset.r!] = n));
 
     this.menu = el(`<div class="menu hidden"><div class="col">
-      <h1>STORMCAM<span class="rec"></span></h1>
+      <h1><span>STORM<span class="cam">CAM</span></span><span class="rec"></span></h1>
       <p class="tag">Independent storm chaser. Central Kansas, late May. Find the storm, get the shot, get out alive.</p>
       <button class="btn primary" data-a="start">Start chase</button>
       <button class="btn" data-a="garage">Garage</button>
@@ -124,6 +126,64 @@ export class UI {
   }
 
   // ------------------------------------------------------------------ screens
+  /**
+   * Title gate and intro. A PLAY button (browsers only allow sound after a
+   * click), then "Made by Beem Studio" fades in and out, two seconds of black,
+   * and the STORMCAM title slowly fades up in the middle before the main menu.
+   * Any key or click after PLAY skips to the menu.
+   */
+  showIntro(onPlay: () => void, onDone: () => void): void {
+    this.hideAll();
+    const intro = el(`<div class="intro">
+      <button class="play">PLAY</button>
+      <div class="studio"><small>MADE BY</small><span>BEEM STUDIO</span></div>
+      <h1 class="title">STORM<span class="cam">CAM</span></h1>
+    </div>`);
+    this.root.append(intro);
+    const play = intro.querySelector<HTMLElement>('.play')!;
+    const studio = intro.querySelector<HTMLElement>('.studio')!;
+    const title = intro.querySelector<HTMLElement>('.title')!;
+    const timers: number[] = [];
+    const at = (s: number, fn: () => void) => timers.push(window.setTimeout(fn, s * 1000));
+    let finished = false;
+    const stop = () => {
+      finished = true;
+      this.cancelIntro = null;
+      timers.forEach((t) => clearTimeout(t));
+      window.removeEventListener('keydown', skip);
+      intro.removeEventListener('click', skip);
+    };
+    const finish = (fade: number) => {
+      if (finished) return;
+      stop();
+      onDone();
+      intro.style.transition = `opacity ${fade}s ease`;
+      intro.classList.add('out');
+      window.setTimeout(() => intro.remove(), fade * 1000 + 50);
+    };
+    const skip = () => finish(0.6);
+    this.cancelIntro = () => {
+      stop();
+      intro.remove();
+    };
+    play.addEventListener('click', (e) => {
+      e.stopPropagation();
+      play.classList.add('gone');
+      onPlay();
+      // Studio card: 1.5 s in, held, 1.5 s out.
+      at(0.8, () => studio.classList.add('on'));
+      at(4.3, () => studio.classList.remove('on'));
+      // Two seconds of black after it has faded, then the title slowly comes up.
+      at(7.8, () => title.classList.add('on'));
+      at(14.3, () => finish(1.8));
+      at(0.3, () => {
+        window.addEventListener('keydown', skip);
+        intro.addEventListener('click', skip);
+      });
+    }, { once: true });
+    play.focus();
+  }
+
   showMenu(): void {
     this.hideDeathCard();
     this.closePanel();
@@ -135,6 +195,7 @@ export class UI {
   }
 
   showHud(): void {
+    this.cancelIntro?.();
     this.menu.classList.add('hidden');
     this.hud.classList.remove('hidden');
   }

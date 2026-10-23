@@ -1,13 +1,15 @@
 /**
- * STORMCAM procedural audio. Fully synthesised with Web Audio — no samples,
- * no network, no music. See layers/ for each sound source.
+ * STORMCAM procedural audio. The world is fully synthesised with Web Audio —
+ * see layers/ for each sound source. The one recording is the menu music,
+ * which skips the world's dynamics and goes straight to the master volume.
  *
  * Graph:
  *   exterior bus → LP (car-body muffling) → cabin-boom peak → gain ┐
  *   interior bus → gain (0 when outside) ──────────────────────────┤
  *   vehicle bus  → LP (firewall/floor) → gain ─────────────────────┼→ mix → HP 24 Hz
  *   direct bus ────────────────────────────────────────────────────┘
- *   → compressor (glue) → trim → limiter → master volume/mute → destination
+ *   → world level → compressor (glue) → trim → limiter → master volume/mute → destination
+ *   menu music → music gain ───────────────────────────────┘
  */
 import type * as THREE from 'three';
 import type { AudioFrameState, ImpactKind } from './AudioTypes';
@@ -51,6 +53,7 @@ interface Graph {
   intGain: Smoothed;
   vehLP: Smoothed;
   vehGain: Smoothed;
+  world: Smoothed;
   volume: Smoothed;
   output: AudioNode;
 }
@@ -66,6 +69,9 @@ export class AudioSystem {
   private muted = false;
   private disposed = false;
   private failed = false;
+  private music: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private musicBuf: Promise<AudioBuffer | null> | null = null;
+  private musicWanted = false;
 
   constructor(private readonly opts: AudioSystemOptions = {}) {}
 
@@ -106,6 +112,57 @@ export class AudioSystem {
   setMuted(m: boolean): void {
     this.muted = !!m;
     this.applyVolume();
+  }
+
+  /**
+   * Start the menu music (looping, fading in). Call after unlock(). Does
+   * nothing if it's already playing; the file is fetched once and kept.
+   */
+  playMusic(url: string, fadeIn = 2): void {
+    const g = this.g;
+    if (!g || this.music) {
+      this.musicWanted = !!g;
+      return;
+    }
+    this.musicWanted = true;
+    this.musicBuf ??= fetch(url)
+      .then((r) => r.arrayBuffer())
+      .then((b) => g.core.ctx.decodeAudioData(b))
+      .catch((e) => {
+        this.warn(e);
+        return null;
+      });
+    void this.musicBuf.then((buf) => {
+      if (!buf || !this.musicWanted || this.music || this.g !== g) return;
+      const ctx = g.core.ctx;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.9, ctx.currentTime, fadeIn / 3);
+      gain.connect(g.output);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(gain);
+      src.start();
+      this.music = { src, gain };
+    });
+  }
+
+  /** Fade the menu music out and stop it. */
+  stopMusic(fadeOut = 1.5): void {
+    this.musicWanted = false;
+    const m = this.music;
+    if (!m || !this.g) return;
+    this.music = null;
+    const now = this.g.core.ctx.currentTime;
+    m.gain.gain.cancelScheduledValues(now);
+    m.gain.gain.setTargetAtTime(0, now, fadeOut / 4);
+    this.safe(() => m.src.stop(now + fadeOut + 0.5));
+  }
+
+  /** Level of the game world (everything but the music): 0 for the intro, low under the menu, 1 in play. */
+  setWorldLevel(v: number, tau = 0.6): void {
+    this.safe(() => this.g!.world.set(clamp(fin(v, 1)), tau));
   }
 
   /** Called every frame. Cheap; a no-op before unlock(). */
@@ -245,8 +302,10 @@ export class AudioSystem {
     const volume = makeGain(ctx, 0);
     volume.connect(ctx.destination);
     const mix = makeGain(ctx, 1);
+    const world = makeGain(ctx, 1);
     const hp = makeFilter(ctx, 'highpass', 24, 0.7);
-    mix.connect(hp);
+    mix.connect(world);
+    world.connect(hp);
     if (this.opts.bypassDynamics) {
       hp.connect(volume);
     } else {
@@ -318,6 +377,7 @@ export class AudioSystem {
       intGain: new Smoothed(ctx, intOut.gain, 1, 0.08),
       vehLP: new Smoothed(ctx, vehLP.frequency, Math.min(2000, nyq), 0.08, 0.01, 5),
       vehGain: new Smoothed(ctx, vehOut.gain, 1, 0.08),
+      world: new Smoothed(ctx, world.gain, 1, 0.6, 0.001, 1e-4),
       volume: new Smoothed(ctx, volume.gain, 0, 0.05, 0.001, 1e-5),
       output: volume,
     };
