@@ -63,8 +63,13 @@ export class Walker {
     const ramp = smoothstep(0, 7, this.caughtTime);
     const feel = 0.45 + 0.55 * ramp;
     const k = Math.min(1, dt * (0.6 + ramp));
+    // Where the vortex is carrying him up to: swung between ~15 and ~100 m. Above that the
+    // updraft mostly lets go of him, so he rides up and down instead of climbing for ever.
+    const g0 = heightAt(this.pos.x, this.pos.z);
+    const targetH = g0 + ramp * (52 + 35 * Math.sin(this.caughtTime * 0.37) + 12 * Math.sin(this.caughtTime * 1.1));
+    const updraft = this.pos.y > targetH ? 0.15 : 1;
     this.vel.x += (wind.x * feel - this.vel.x) * k;
-    this.vel.y += (wind.y * 0.9 * feel - this.vel.y) * k - 9.81 * dt;
+    this.vel.y += (wind.y * 0.9 * feel * updraft - this.vel.y) * k - 9.81 * dt;
     this.vel.z += (wind.z * feel - this.vel.z) * k;
     // The vortex keeps him: drawn toward a wandering orbit around the core,
     // swung up and down between ~15 and ~100 m.
@@ -75,9 +80,7 @@ export class Walker {
       const pull = clamp((want - d) * 1.4, -9, 9) * ramp * dt;
       this.vel.x += (dx / d) * pull;
       this.vel.z += (dz / d) * pull;
-      const g0 = heightAt(this.pos.x, this.pos.z);
-      const targetH = g0 + ramp * (52 + 35 * Math.sin(this.caughtTime * 0.37) + 12 * Math.sin(this.caughtTime * 1.1));
-      this.vel.y += clamp((targetH - this.pos.y) * 0.9, -12, 12) * dt;
+      this.vel.y += clamp((targetH - this.pos.y) * 0.9, -20, 20) * dt;
     }
     // Gusts inside the core fling him about.
     this.vel.x += (Math.random() - 0.5) * 48 * dt;
@@ -156,7 +159,7 @@ export class Walker {
       this.vel.x += (wind.x / w) * push * dt * 6;
       this.vel.z += (wind.z / w) * push * dt * 6;
     }
-    if (((w > 50 || wind.y > 22) && coreRatio < 1.3) || w > 75) {
+    if (((w > 50 || wind.y > 22) && coreRatio < 1.3) || w > 95) {
       // Lifted off his feet.
       this.liftOff(this.vel.set(wind.x * 0.4, 6, wind.z * 0.4));
       return;
