@@ -1,10 +1,8 @@
 # Builds the game and uploads it to itch.io (HTML5 channel) on every push to main.
 #
-# Setup (GitHub → repo Settings → Secrets and variables → Actions):
-#   Secret   BUTLER_API_KEY  your itch.io API key (itch.io → Settings → API keys)
-#   Variable ITCH_USER       your itch.io username, e.g. beemstudio
-#   Variable ITCH_GAME       the game's URL slug, e.g. stormcam (from https://USER.itch.io/SLUG)
-# Until both variables are set the job is skipped.
+# Uploads to https://bennjam.itch.io/stormcam. Needs the repository secret
+# BUTLER_API_KEY (an itch.io API key: itch.io → Settings → API keys).
+# The ITCH_USER / ITCH_GAME repository variables can override the target.
 name: Deploy to itch.io
 
 on:
@@ -21,7 +19,6 @@ concurrency:
 
 jobs:
   itch:
-    if: vars.ITCH_USER != '' && vars.ITCH_GAME != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -41,4 +38,4 @@ jobs:
       - name: Push dist/ to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-        run: butler/butler push dist "${{ vars.ITCH_USER }}/${{ vars.ITCH_GAME }}:html5" --userversion "${{ github.sha }}"
+        run: butler/butler push dist "${{ vars.ITCH_USER || 'bennjam' }}/${{ vars.ITCH_GAME || 'stormcam' }}:html5" --userversion "${{ github.sha }}"
