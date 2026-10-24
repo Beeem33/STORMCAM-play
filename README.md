@@ -46,7 +46,7 @@ helpers (`dev.tornadoView(distance, rating)`, `dev.step(frames)`,
 | F | Get out of / back into the vehicle |
 | E | At the liftgate: open it, take or return a probe. On foot: set a probe down, program it (type the answers on the keypad), or pick it up |
 | R | Weather radar (1–4 picks a target cell) |
-| X | Wipers: auto / off / low / high |
+| X | Wipers (start off): cycle auto / off / low / high |
 | L | Headlights (in the truck) / head torch (on foot) |
 | T | Dashcam timestamp overlay |
 | Right mouse (hold) | Zoom (bodycam) |

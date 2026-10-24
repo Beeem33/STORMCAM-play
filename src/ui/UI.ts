@@ -336,7 +336,7 @@ export class UI {
     const keys: [string, string][] = [
       ['W / S', 'Accelerate / brake, reverse when stopped'], ['A / D', 'Steer'], ['Space', 'Handbrake'], ['Mouse', 'Look around'],
       ['1 / 2 / 3, wheel', 'Camera / radar tablet / flashlight (again to put away)'], ['Left click', 'Use the item: film, flashlight'], ['C', 'Driver view ↔ dashcam'], ['F', 'Get out / get in'], ['E', 'Liftgate, take / set down / program / pick up probes'], ['L', 'Headlights / head torch on foot'],
-      ['R', 'Weather radar'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers: auto / off / low / high'],
+      ['R', 'Weather radar'], ['1 – 4', 'Pick target cell (radar open)'], ['X', 'Wipers (start off): auto / off / low / high'],
       ['L', 'Headlights'], ['T', 'Dashcam timestamp'], ['Hold RMB', 'Zoom (bodycam)'], ['Z', 'Tornado close: get down and hold on to the grass'], ['Esc', 'Pause'],
     ];
     const p = this.openPanel(el(`<div class="panel"><h2>Controls</h2><div class="keys">${keys

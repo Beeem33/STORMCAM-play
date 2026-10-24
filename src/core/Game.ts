@@ -344,6 +344,7 @@ export class Game {
     this.weather.startDay({ day: d, seed: (Math.random() * 1e9) | 0 }, { x: start.x, z: start.z });
     this.tornadoes.clear();
     this.windshield.clear();
+    this.windshield.mode = 'off';
     this.recorder.reset();
     this.probes.reset();
     this.hold.reset();

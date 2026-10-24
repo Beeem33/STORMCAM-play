@@ -39,7 +39,8 @@ export class Windshield {
   private readonly proxies: { src: THREE.Object3D; proxy: THREE.Mesh }[] = [];
   private spawnAcc = 0;
 
-  mode: WiperMode = 'auto';
+  /** Wipers start off; X cycles them. */
+  mode: WiperMode = 'off';
   private wiperAngle = 0;
   private wiperDir = 0; // 1 up, -1 down, 0 parked
   private wiperPause = 0;
