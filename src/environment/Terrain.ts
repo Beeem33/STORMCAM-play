@@ -106,14 +106,12 @@ void groundShade(vec3 wp, float pix, out vec3 albedo, out float rough, out vec2 
     vec3 grn = vec3(0.075, 0.09, 0.04);
     field = mix(tan, grn, smoothstep(0.3, 0.75, nSm.r * 0.6 + nMid.g * 0.4) * 0.6);
     field *= 0.8 + 0.4 * nFine.b * fineFade + 0.15 * (1.0 - fineFade);
-  } else if (ft == 2) { // plowed / planted bare soil
-    vec3 soil = vec3(0.16, 0.115, 0.075);
-    float furrow = stripes(rowCoord, 0.76, 0.45, pix);
-    field = soil * (0.9 + 0.14 * furrow) * (0.85 + 0.3 * nSm.r);
-    fieldRough = 1.0;
-    tilt += vec2(rowsAlongX ? 0.0 : (furrow - 0.5) * 0.12, rowsAlongX ? (furrow - 0.5) * 0.12 : 0.0) * fineFade;
-  } else if (ft == 3) { // young row crop
-    vec3 soil = vec3(0.15, 0.11, 0.07);
+  } else if (ft == 2) { // fallow ground gone to grass
+    vec3 grn = vec3(0.06, 0.088, 0.032);
+    vec3 dry = vec3(0.13, 0.12, 0.07);
+    field = mix(grn, dry, smoothstep(0.35, 0.8, patchN) * 0.45) * (0.85 + 0.3 * nSm.r);
+  } else if (ft == 3) { // young row crop in grass
+    vec3 soil = vec3(0.075, 0.095, 0.04);
     vec3 crop = vec3(0.055, 0.085, 0.03);
     float row = stripes(rowCoord, 0.76, 0.22 + 0.12 * nMid.r, pix);
     field = mix(soil, crop, row) * (0.85 + 0.3 * nSm.g);
@@ -122,7 +120,7 @@ void groundShade(vec3 wp, float pix, out vec3 albedo, out float rough, out vec2 
   }
   // Grass texture on grassy ground: clumps with soil showing between them,
   // streaky blades and specks of dead straw.
-  float grassy = (ft == 0 || ft == 1 || ft == 4) ? 1.0 : 0.0;
+  float grassy = 1.0; // grass on every field
   vec3 gaps = vec3(0.075, 0.06, 0.04);
   vec3 straw = vec3(0.3, 0.26, 0.15);
   vec3 tufted = mix(gaps, field * (0.75 + 0.6 * nBlade.r), 0.35 + 0.65 * tuft);

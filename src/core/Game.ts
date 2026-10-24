@@ -465,7 +465,8 @@ export class Game {
   private vortexRide(dt: number, t: TornadoSystem['tornado']): void {
     const w = this.walker;
     w.vortex = t ? { x: t.position.x, z: t.position.z, r: t.radius } : null;
-    if (this.killAt === 0) this.killAt = 10 + Math.random() * 10;
+    // Long enough to be carried in and flown around before it ends.
+    if (this.killAt === 0) this.killAt = 18 + Math.random() * 10;
     w.steady = w.caughtTime > this.killAt - 1.4;
     const eye = w.eye;
     if (!this.killer && w.caughtTime > this.killAt - 0.5) {
@@ -847,7 +848,10 @@ export class Game {
       const yawCar = this.vehicle.heading;
       this.walker.car = { x: this.vehicle.pos.x, z: this.vehicle.pos.z, rot: -yawCar, hx: 1.0, hz: 2.55 };
       if (this.hold.active) this.updateHold(sdt, realDt, _w);
-      else this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w);
+      else {
+        const coreRatio = t && t.presence > 0.2 ? t.distanceTo(this.walker.pos) / Math.max(10, t.radius * 1.1) : Infinity;
+        this.walker.update(sdt, { fwd, right, run: !this.probes.carrying && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) }, this.rig.yaw, _w, coreRatio);
+      }
       if (!this.walker.caught) this.keepInChaseArea(this.walker.pos, this.walker.vel);
       if (this.walker.caught) this.vortexRide(sdt, t);
       if (this.walker.caught) {

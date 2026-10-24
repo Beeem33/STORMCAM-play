@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { fieldTypeAt, heightAt, padDistance, surfaceAt } from '../environment/WorldShape';
+import { heightAt, padDistance, surfaceAt } from '../environment/WorldShape';
 import { clamp, damp } from '../utils/MathUtils';
 
 /**
@@ -52,9 +52,10 @@ const _w = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _ndc = new THREE.Vector3();
 
-/** Can you get a grip here? Grass or pasture, not road, gravel, mud, bare plowed ground or the gas station's concrete. */
+/** Can you get a grip here? Any field or verge (grass grows everywhere), not a road or the gas station's concrete. */
 export function grippable(x: number, z: number, wetness: number): boolean {
-  return surfaceAt(x, z, wetness) === 'grass' && fieldTypeAt(x, z) !== 2 && padDistance(x, z) > 1.5;
+  const s = surfaceAt(x, z, wetness);
+  return (s === 'grass' || s === 'mud') && padDistance(x, z) > 1.5;
 }
 
 const GRASS_COLORS = [0x6f7d3a, 0x7d8a44, 0x8c8a4a, 0x5d6b31];
@@ -203,10 +204,10 @@ export class GrassHold {
     return out.copy(this.pose.shoulders).addScaledVector(this.pose.headDir, -0.6).setY(0);
   }
 
-  /** Mouse look while down: free to look round over a shoulder at his legs and the funnel. */
+  /** Mouse look while down: 90° either side (a 180° arc), up to the sky and down at the grass. */
   look(dx: number, dy: number, sens: number, invertY: boolean): void {
-    this.lookYaw = clamp(this.lookYaw - dx * sens, -2.6, 2.6);
-    this.lookPitch = clamp(this.lookPitch - dy * sens * (invertY ? -1 : 1), -0.9, 1.4);
+    this.lookYaw = clamp(this.lookYaw - dx * sens, -Math.PI / 2, Math.PI / 2);
+    this.lookPitch = clamp(this.lookPitch - dy * sens * (invertY ? -1 : 1), -0.6, 1.1);
   }
 
   /**
@@ -453,6 +454,8 @@ export class GrassHold {
     cam.position.copy(eye).addScaledVector(p.headDir, 0.06);
     cam.position.x += Math.sin(t * 23) * a * 0.3;
     cam.position.y += Math.sin(t * 19 + 1) * a * 0.3;
+    // Never below the ground (his face is right down in the grass).
+    cam.position.y = Math.max(cam.position.y, heightAt(cam.position.x, cam.position.z) + 0.25);
     cam.rotation.set(
       clamp(pitch + this.lookPitch, -1.5, 1.5) + Math.sin(t * 17) * a,
       yaw + this.lookYaw + Math.sin(t * 13 + 2) * a,

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../environment/WorldShape';
 import type { Collider2D } from '../environment/Colliders';
-import { clamp, damp } from '../utils/MathUtils';
+import { clamp, damp, smoothstep } from '../utils/MathUtils';
 
 /**
  * The chaser on foot: walks/runs on the terrain, gets shoved by strong wind,
@@ -58,27 +58,31 @@ export class Walker {
   /** In the vortex: the wind carries him; gravity and the ground do the rest. */
   private updateCaught(dt: number, wind: THREE.Vector3): void {
     this.caughtTime += dt;
-    const k = Math.min(1, dt * 1.6);
-    this.vel.x += (wind.x - this.vel.x) * k;
-    this.vel.y += (wind.y * 0.9 - this.vel.y) * k - 9.81 * dt;
-    this.vel.z += (wind.z - this.vel.z) * k;
-    // The vortex keeps him: drawn back toward an orbit just inside the core,
-    // carried up and down between ~20 and ~60 m.
+    // The vortex takes him over several seconds, not in an instant: at first
+    // he's dragged and tumbled along low down, then lifted and drawn in.
+    const ramp = smoothstep(0, 7, this.caughtTime);
+    const feel = 0.45 + 0.55 * ramp;
+    const k = Math.min(1, dt * (0.6 + ramp));
+    this.vel.x += (wind.x * feel - this.vel.x) * k;
+    this.vel.y += (wind.y * 0.9 * feel - this.vel.y) * k - 9.81 * dt;
+    this.vel.z += (wind.z * feel - this.vel.z) * k;
+    // The vortex keeps him: drawn toward a wandering orbit around the core,
+    // swung up and down between ~15 and ~100 m.
     if (this.vortex) {
       const dx = this.pos.x - this.vortex.x, dz = this.pos.z - this.vortex.z;
       const d = Math.hypot(dx, dz) || 1;
-      const want = this.vortex.r * 0.7 + 12;
-      const pull = (want - d) * 1.4 * dt;
+      const want = this.vortex.r * 0.7 + 12 + 30 * Math.sin(this.caughtTime * 0.23);
+      const pull = clamp((want - d) * 1.4, -9, 9) * ramp * dt;
       this.vel.x += (dx / d) * pull;
       this.vel.z += (dz / d) * pull;
       const g0 = heightAt(this.pos.x, this.pos.z);
-      const targetH = g0 + 40 + 20 * Math.sin(this.caughtTime * 0.45);
-      this.vel.y += (targetH - this.pos.y) * 0.9 * dt;
+      const targetH = g0 + ramp * (52 + 35 * Math.sin(this.caughtTime * 0.37) + 12 * Math.sin(this.caughtTime * 1.1));
+      this.vel.y += clamp((targetH - this.pos.y) * 0.9, -12, 12) * dt;
     }
     // Gusts inside the core fling him about.
-    this.vel.x += (Math.random() - 0.5) * 30 * dt;
-    this.vel.y += (Math.random() - 0.4) * 20 * dt;
-    this.vel.z += (Math.random() - 0.5) * 30 * dt;
+    this.vel.x += (Math.random() - 0.5) * 48 * dt;
+    this.vel.y += (Math.random() - 0.4) * 30 * dt;
+    this.vel.z += (Math.random() - 0.5) * 48 * dt;
     this.pos.addScaledVector(this.vel, dt);
     // Buildings, trees and the truck: below roof height he bounces off them instead of passing through.
     if (this.pos.y - heightAt(this.pos.x, this.pos.z) < 10) {
@@ -106,10 +110,10 @@ export class Walker {
       this.airTime = 0;
     } else this.airTime += dt;
     // Tumbling: the spin keeps changing as he's thrown around.
-    this.spin.x += (Math.random() - 0.5) * 40 * dt;
-    this.spin.y += (Math.random() - 0.5) * 30 * dt;
-    this.spin.z += (Math.random() - 0.5) * 40 * dt;
-    this.spin.clampLength(0, 9);
+    this.spin.x += (Math.random() - 0.5) * 16 * dt;
+    this.spin.y += (Math.random() - 0.5) * 12 * dt;
+    this.spin.z += (Math.random() - 0.5) * 16 * dt;
+    this.spin.clampLength(0, 3.5);
     if (this.steady) {
       this.spin.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.tumble.x *= Math.max(0, 1 - dt * 5);
@@ -123,7 +127,11 @@ export class Walker {
     this.eye.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
   }
 
-  update(dt: number, move: { fwd: number; right: number; run: boolean }, yaw: number, wind: THREE.Vector3): void {
+  /**
+   * @param coreRatio distance to the funnel in core radii (Infinity with no tornado):
+   *   strong wind shoves him about anywhere, but only the vortex itself lifts him.
+   */
+  update(dt: number, move: { fwd: number; right: number; run: boolean }, yaw: number, wind: THREE.Vector3, coreRatio = Infinity): void {
     if (this.dead) return;
     if (this.caught) {
       this.updateCaught(dt, wind);
@@ -148,7 +156,7 @@ export class Walker {
       this.vel.x += (wind.x / w) * push * dt * 6;
       this.vel.z += (wind.z / w) * push * dt * 6;
     }
-    if (w > 50 || wind.y > 22) {
+    if (((w > 50 || wind.y > 22) && coreRatio < 1.3) || w > 75) {
       // Lifted off his feet.
       this.liftOff(this.vel.set(wind.x * 0.4, 6, wind.z * 0.4));
       return;

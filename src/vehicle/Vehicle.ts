@@ -420,6 +420,12 @@ export class Vehicle {
     // tyres are planted, so a tornado (or a bad jump) can still roll it.
     const planted = this.wheels.filter((wh) => wh.load > 0).length;
     if (planted >= 3) {
+      // Brake assist: on its own the tyre model (wet roads, gravel) let the truck slide on
+      // for hundreds of feet. Add ~0.75 g on top while the brake is down, easing off at a crawl.
+      const vF = this.vel.dot(fwd);
+      if (braking > 0.05 && Math.abs(vF) > 0.3) {
+        this.force.addScaledVector(fwd, -Math.sign(vF) * this.mass * 7.5 * braking * Math.min(1, Math.abs(vF) / 3));
+      }
       const side = new THREE.Vector3().crossVectors(fwd, up);
       const rollAngle = Math.asin(clamp(side.y, -1, 1));
       const rollRate = this.angVel.dot(fwd);
